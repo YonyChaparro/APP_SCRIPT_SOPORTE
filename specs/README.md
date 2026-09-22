@@ -20,9 +20,9 @@ Carpeta de especificaciones del proyecto **Solicitudes Soporte Técnico**. Cada 
 
 | Feature | Requisito de origen | Estado | Depende de |
 |---|---|---|---|
-| [00 · Calendario hábil](00-calendario-habil/requirements.md) | Base común de 2 y 3 | **Implementada** (17-sep-2026) · 45 casos en verde · pendiente T-00-08 en la hoja | — |
-| [01 · Reloj hábil](01-reloj-habil/requirements.md) | «2. Cortar el tiempo cuando sean fines de semana y festivos» | **Implementada** (17-sep-2026) · 39 casos en verde · pendiente migración de la bandeja (T-01-09) | 00 |
-| [02 · Ventana del formulario](02-ventana-formulario/requirements.md) | «3. Bloquear el formulario después de los viernes 3:30 pm y activarlo el primer día hábil a las 8 am» | **Implementada** (17-sep-2026) · 38 casos en verde · pendiente puesta en marcha (T-02-13) | 00 |
+| [00 · Calendario hábil](00-calendario-habil/requirements.md) | Base común de 2 y 3 | **Implementada y verificada en la hoja** (22-sep-2026) · 55 casos en verde · T-00-08 cerrada | — |
+| [01 · Reloj hábil](01-reloj-habil/requirements.md) | «2. Cortar el tiempo cuando sean fines de semana y festivos» | **Implementada y verificada en la hoja** (22-sep-2026) · 39 casos en verde · bandeja migrada (T-01-09 cerrada) | 00 |
+| [02 · Ventana del formulario](02-ventana-formulario/requirements.md) | «3. Bloquear el formulario después de los viernes 3:30 pm y activarlo el primer día hábil a las 8 am» | **Implementada y verificada en la hoja** (22-sep-2026) · 38 casos en verde · disparadores instalados (T-02-13 cerrada) | 00 |
 
 **Archivos:** `Calendario.gs` (00), `Reloj.gs` (01), `Ventana.gs` (02); `Código.gs` conserva configuración, disparadores, menú y motor de puntajes; `Servicios.gs` contiene el catálogo del Excel y su prueba exhaustiva, `Tiempos.gs` la de plazos de respuesta y `Verificacion.gs` el informe de verificación dentro de la hoja (ver abajo).
 
@@ -34,11 +34,13 @@ Carpeta de especificaciones del proyecto **Solicitudes Soporte Técnico**. Cada 
 
 `tests/excel.js` compara ese catálogo con el **archivo `.xlsx` real del disco**, incluidas las dos pestañas ocultas de desplegables, y recorre las 4.408 combinaciones leídas del archivo. Es la única pieza que mira el original: sin ella, cambiar un puntaje en el motor y «arreglar» la prueba cambiándolo igual en el oráculo deja todo en verde mientras el Excel dice otra cosa. Solo corre en Node. **4.700 comprobaciones en verde.**
 
-`tests/mutacion.js` confirma que las capas de prueba detectan **17/17** averías introducidas a propósito; cuatro de ellas son deriva respecto del Excel y solo las ve `tests/excel.js`. `TIEMPOS_POR_SERVICIO.md` (generado con `npm run matriz`) publica el plazo de los 31 servicios para cualquier ubicación y cantidad. Detalle en `INFORME_TECNICO.md` §14.
+`tests/mutacion.js` confirma que las capas de prueba detectan **21/21** averías introducidas a propósito; cuatro de ellas son deriva respecto del Excel y solo las ve `tests/excel.js`. `TIEMPOS_POR_SERVICIO.md` (generado con `npm run matriz`) publica el plazo de los 31 servicios para cualquier ubicación y cantidad. Detalle en `INFORME_TECNICO.md` §14.
 
 No llevan carpeta de spec propia: no añaden funcionalidad, verifican la que ya estaba especificada en el motor de puntajes. Su única regla de mantenimiento: **cuando cambie el Excel, actualizar primero el catálogo de `Servicios.gs`, después `PUNTAJES` en `Código.gs` y por último regenerar la matriz**. Entre los pasos las suites quedan en rojo, que es justamente lo que se busca.
 
-**Verificación pendiente en la hoja de pruebas** (solo puede hacerse dentro de Sheets):
+**Verificación en la hoja de pruebas: completada el 22 de septiembre de 2026** — *0 errores, 0 avisos, 13 pasos correctos*. Dos defectos encontrados y corregidos en el camino (H-14, la fórmula no se analizaba en un archivo en español; H-15, el auditor confundía «Subcategoría» con «categoría»): ver `INFORME_TECNICO.md` §16.
+
+Para repetirla tras cualquier cambio:
 
 1. *Soporte → **Verificación completa…*** y responder **SÍ** a las correcciones. Una sola acción que genera los festivos de 2026 y 2027, ejecuta las seis suites (44.372 casos) y la comprobación de la fórmula, migra la bandeja creando `INICIO RELOJ` y `FECHA LÍMITE`, y audita las opciones de los dos formularios. Deja el detalle en la pestaña `Informe_Verificación`; el resumen debe quedar sin errores.
 2. *Soporte → Configurar triggers* (instala el programador y la reconciliación; reconcilia el formulario de pruebas de inmediato). La verificación **no** lo hace por su cuenta porque borra todos los disparadores existentes y manda correo.

@@ -481,13 +481,13 @@ Las 44.372 comprobaciones de las suites no tocan Google: son JavaScript puro. To
 | 4. Pestaña Festivos | Diagnóstico | Filas, fechas inválidas, años con festivos nacionales y cuáles faltan |
 | 5. Generar festivos | **Corrección** | Genera los años que falten |
 | 6. Pruebas automáticas | Diagnóstico | Las seis suites, con su recuento |
-| 6b. Fórmula ↔ script | Diagnóstico | La comprobación que necesita Sheets de verdad, separada del resto |
+| 6b. Fórmula ↔ script | Diagnóstico | La comprobación que necesita Sheets de verdad, separada del resto. Descubrió **H-14** (§16) |
 | 7. Bandeja de pendientes | Diagnóstico | Solicitudes sin fecha límite, con fecha de solicitud inválida, vencidas y próximas a vencer |
 | 8. Recalcular plazos | **Corrección** | `recalcularPendientes()`, con el listado de lo que cambió |
 | 9. Bandeja tras el recálculo | Diagnóstico | Repite el paso 7 para ver el efecto (solo si hubo corrección) |
 | 10. Disparadores | Diagnóstico | Los seis permanentes esperados, los que faltan, los que sobran y los puntuales de la ventana |
 | 11. Ventana del formulario | Diagnóstico | Estado real contra el que dicta la regla, modo, próxima apertura y cierre |
-| 12. Opciones de los formularios | Diagnóstico | Audita **los dos** formularios contra el catálogo y vuelca ambos en `Auditoría_Formulario` |
+| 12. Opciones de los formularios | Diagnóstico | Audita **los dos** formularios contra el catálogo y vuelca ambos en `Auditoría_Formulario`. Descubrió **H-15** (§16) |
 
 ### 15.3 Qué no hace por su cuenta
 
@@ -504,3 +504,50 @@ El diagnóstico es de solo lectura con una excepción heredada: `detectarColumna
 
 Fuera de Sheets no hay nada que diagnosticar, así que la prueba no comprueba que el diagnóstico acierte, sino lo contrario: que **un entorno roto no tumbe la herramienta con la que se diagnostica un entorno roto**. Ejecuta el informe contra un libro vacío y contra uno mínimo, y exige que devuelva los doce pasos, que ninguno propague una excepción, que ninguno quede sin detalle, que las seis suites puras sigan en verde sin una sola hoja y que los pasos de corrección no se ejecuten sin autorización. **86 comprobaciones.**
 
+---
+
+## 16. Hallazgos de la primera verificación en la hoja real (22 de septiembre de 2026)
+
+La primera ejecución de *Soporte → Verificación completa…* sobre `Solicitudes Soporte Técnico (pruebas)` dejó las seis suites en verde (44.372 casos **dentro de Sheets**, no solo en Node) y destapó dos defectos que ninguna prueba local podía ver, más un dato corrupto.
+
+### H-14 · Alto — La fórmula de horas restantes no se analiza en un archivo en español *(corregido)*
+
+**Síntoma.** Los 6 casos de `probarFormulaHorasHabiles` devolvieron `#ERROR!`. Los seis idénticos, y el `IFERROR` de la propia fórmula no los atrapó.
+
+**Causa.** `#ERROR!` es el error de *análisis* de Google Sheets, no de cálculo: la fórmula no llegó a ejecutarse, y por eso `IFERROR` —que solo captura errores de evaluación— no podía hacer nada. Sheets analiza las fórmulas en el idioma del archivo: donde el separador decimal es la coma (es_CO, es_ES…), el separador de argumentos es `;` y no `,`. `Range.setFormula()` **no traduce**. `formulaHorasHabilesRestantes` las escribía siempre con comas.
+
+**Impacto.** La columna `HORAS HÁBILES RESTANTES` de la bandeja mostraba `#ERROR!` en todas las filas. La alerta diaria de vencidas no dependía de ella —`verificarSolicitudesVencidas` calcula con el script—, así que el fallo era puramente visual, pero dejaba sin información la única columna que el técnico mira para priorizar.
+
+**Corrección.** `separadorDeFormula()` deduce el separador del idioma del archivo (`getSpreadsheetLocale()` + `toLocaleString`), cacheado y sobrescribible por la propiedad de script `formula.separador`. `formulaHorasHabilesRestantes` se reescribió componiendo los argumentos con ese separador; con coma produce **exactamente la misma cadena que antes**, así que el cambio no altera el comportamiento en un archivo en inglés.
+
+Además, `probarFormulaHorasHabiles` ya no se fía de la deducción: se lo pregunta a la hoja. Escribe `=SUM(1;2)` en una celda temporal y mira si da 3. Se usa punto y coma y no coma en la sonda porque `=SUM(1,2)` en español se leería como `SUM(1,2)` = 1,2 y devolvería un número igualmente, sin delatar nada. Si lo que encuentra no coincide con lo deducido, lo corrige, lo guarda en las propiedades del script y lo dice en el informe.
+
+**Prueba.** CA-CAL-09 en `probarCalendario` genera la fórmula con los dos separadores y verifica, en cada uno, que no se cuele el separador contrario, que los paréntesis cuadren, que apunte a la celda correcta y que `LET` reciba un número impar de argumentos. Tres mutaciones nuevas lo confirman.
+
+### H-15 · Medio — El auditor de formularios confundía «Subcategoría» con «categoría» *(corregido)*
+
+**Síntoma.** El paso 12 marcó **9 opciones SIN PUNTAJE en los dos formularios**: las siete de las subcategorías Hardware / Software / Conectividad y las dos de Usuario.
+
+**Causa.** Un falso positivo del auditor, no un problema de los formularios. `auditarOpcionesFormulario` decidía qué se estaba preguntando con `/categor/i.test(pregunta)`, y el título «Subcategoría Hardware:» **contiene** «categor». Las opciones de esas preguntas —que son servicios— se comprobaban contra el índice de categorías, donde evidentemente no están.
+
+**Por qué importa aunque no rompiera nada en producción.** En ejecución el motor no usa el título de la pregunta, sino la columna `CATEGORIA` de la hoja, así que las solicitudes reales siempre se puntuaron bien. El daño era del diagnóstico: nueve falsos positivos permanentes enseñan a ignorar la salida del auditor, que es exactamente lo que no debe pasar con una herramienta de verificación.
+
+**Corrección.** El rol de cada pregunta se decide una sola vez en `rolDePregunta(pregunta)`, que descarta `/subcategor/i` antes de mirar nada más. Una subcategoría siempre pregunta por un servicio.
+
+**Prueba.** Nueve casos en `probarCalculo` fijan el rol esperado de los títulos reales de los dos formularios, incluida la variante en mayúsculas. Una mutación confirma que quitar la línea de `subcategor` vuelve a romperlo.
+
+### Dato corrupto — `FCE-SOP-088` con fecha de solicitud en 1969
+
+La bandeja tiene una fila cuya `FECHA SOLICITUD` es `1969-12-31 19:00 GMT-5`, es decir el instante cero de Unix: la celda está vacía o contiene un 0 formateado como fecha. `recalcularPendientes` la detecta, la marca en amarillo con una nota y la deja fuera del recálculo, que es el comportamiento correcto: inventarle una fecha sería peor.
+
+No es un defecto del código y no se puede arreglar desde aquí. **Corresponde corregir la celda a mano** con la fecha real de la solicitud (está en `Respuestas_Oficiales`, columna `Marca temporal`, buscando el radicado) y volver a ejecutar la verificación.
+
+### Cierre
+
+Segunda ejecución tras corregir H-14 y H-15, instalar los disparadores desde el menú y arreglar a mano la fecha de `FCE-SOP-088`:
+
+> **0 errores, 0 avisos, 13 pasos correctos.**
+
+Con eso queda verificado dentro de Sheets todo lo que `specs/README.md` tenía pendiente desde el 17 de septiembre: festivos de 2026 y 2027 generados, las seis suites en verde **en el entorno real** (44.372 casos), la fórmula de la hoja coincidiendo con el script, la bandeja migrada con `INICIO RELOJ` y `FECHA LÍMITE`, los seis disparadores instalados, la ventana en el estado que dicta la regla y las opciones de los dos formularios con puntaje.
+
+Los disparadores siguen sin instalarse desde la verificación: `configurarTriggers()` borra todos los existentes y manda correo, así que se ejecuta aparte y la verificación se limita a confirmar el resultado.

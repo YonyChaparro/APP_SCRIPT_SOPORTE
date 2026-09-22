@@ -27,7 +27,9 @@ const CALENDARIO = "Calendario.gs";
 const COMANDOS = {
   servicios: "node tests/run.js servicios",
   tiempos: "node tests/run.js tiempos",
-  excel: "node tests/excel.js"
+  excel: "node tests/excel.js",
+  calendario: "node tests/run.js calendario",
+  calculo: "node tests/run.js cálculo"
 };
 
 // { descripcion, suite, cambios: [[archivo, texto, reemplazo], …], coherente? }
@@ -65,6 +67,19 @@ const MUTACIONES = [
     cambios: [[CALENDARIO, "return new Date(t.getTime() + restante * MS_HORA);", "return new Date(t.getTime() + (restante + 1) * MS_HORA);"]] },
   { descripcion: "la fecha límite deja de saltar los días no hábiles", suite: "tiempos",
     cambios: [[CALENDARIO, "if (!esDiaHabil(t, festivos)) t = siguienteDiaHabil(t, festivos);", ""]] },
+
+  // --- Fórmula de la hoja (suite probarCalendario) ---
+  { descripcion: "la fórmula se escribe siempre con comas, ignorando el idioma del archivo", suite: "calendario",
+    cambios: [[CALENDARIO, 'const habiles = (desde, hasta) => `NETWORKDAYS.INTL(${A(desde, hasta, "1", F)})`;',
+                           'const habiles = (desde, hasta) => `NETWORKDAYS.INTL(${[desde, hasta, "1", F].join(",")})`;']] },
+  { descripcion: "LET pierde un nombre y queda con argumentos pares", suite: "calendario",
+    cambios: [[CALENDARIO, '    "vdi", "INT(vini)",\n', '    "INT(vini)",\n']] },
+  { descripcion: "paréntesis de más en la fórmula", suite: "calendario",
+    cambios: [[CALENDARIO, 'return `=IF(${A(`${L}=""`', 'return `=IF((${A(`${L}=""`']] },
+
+  // --- Auditoría de los formularios (suite probarCalculo) ---
+  { descripcion: "«Subcategoría X» vuelve a tomarse por la pregunta de categoría", suite: "calculo",
+    cambios: [[CODIGO, '  if (/subcategor/i.test(pregunta)) return "servicio";\n', ""]] },
 
   // --- Deriva respecto del Excel (solo la ve tests/excel.js) ---
   { descripcion: "puntaje de una ubicación cambiado en el motor Y en su oráculo", suite: "excel", coherente: true,
@@ -120,7 +135,7 @@ try {
     const r = correr(COMANDOS[m.suite]);
     const detectada = r.codigo !== 0;
     if (detectada) detectadas++;
-    const primera = (r.salida.split("\n").find(l => /^\s+(B|TR|E)\d/.test(l)) || "").trim();
+    const primera = (r.salida.split("\n").find(l => /^\s+((B|TR|E|V)\d|f[oó]rmula|rolDePregunta)/.test(l)) || "").trim();
     console.log(`${detectada ? "✓ detectada    " : "✗ NO DETECTADA "} [${m.suite}] ${m.descripcion}${aviso}`);
     if (detectada && primera) console.log(`                 ${primera.slice(0, 140)}`);
   });

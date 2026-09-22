@@ -247,17 +247,62 @@ function letraColumna(n) {
   return s;
 }
 
+// Google Sheets analiza las fórmulas en el idioma del archivo: donde el decimal es coma
+// (es_CO, es_ES…) el separador de argumentos es ";" y no ",". `setFormula()` NO traduce,
+// así que una fórmula escrita con comas en un archivo en español se rechaza con #ERROR!,
+// que es un error de análisis y por tanto IFERROR no puede atraparlo.
+const CLAVE_SEPARADOR = "formula.separador";
+let _separadorFormula = null;
+
+function separadorDeFormula() {
+  if (_separadorFormula) return _separadorFormula;
+  // Si la detección se equivocara, probarFormulaHorasHabiles() fija aquí el valor correcto.
+  try {
+    const fijado = PropertiesService.getScriptProperties().getProperty(CLAVE_SEPARADOR);
+    if (fijado === "," || fijado === ";") return (_separadorFormula = fijado);
+  } catch (e) {}
+  let locale = "en_US";
+  try { locale = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetLocale() || "en_US"; } catch (e) {}
+  let comaDecimal = false;
+  try { comaDecimal = (1.1).toLocaleString(String(locale).replace("_", "-")).indexOf(",") !== -1; } catch (e) {}
+  return (_separadorFormula = comaDecimal ? ";" : ",");
+}
+
+function fijarSeparadorDeFormula(sep) {
+  _separadorFormula = sep;
+  try { PropertiesService.getScriptProperties().setProperty(CLAVE_SEPARADOR, sep); } catch (e) {}
+}
+
 // Horas hábiles restantes hasta la celda de fecha límite (negativas si vencida). `ahoraExpr`
-// permite fijar el instante en pruebas; por defecto NOW().
+// permite fijar el instante en pruebas; por defecto NOW(). Debe recibirse ya escrita con el
+// separador de este archivo (ver separadorDeFormula).
+// Nombres de variable que no coinciden con funciones de Sheets en ningún idioma ("n" chocaba con N()).
 function formulaHorasHabilesRestantes(fila, columnaLimite, ahoraExpr) {
+  const S = separadorDeFormula();
+  const A = function () { return Array.prototype.slice.call(arguments).join(S); };
   const L = `${letraColumna(columnaLimite)}${fila}`;
   const F = `'${CONFIG.HOJAS.FESTIVOS}'!$A$2:$A`;
   const ahora = ahoraExpr || "NOW()";
-  // Nombres de variable que no coinciden con funciones de Sheets en ningún idioma ("n" chocaba con N()).
-  return `=IF(${L}="","",IFERROR(LET(vnow,${ahora},vlim,${L},vini,MIN(vnow,vlim),vfin,MAX(vnow,vlim),vdi,INT(vini),vdf,INT(vfin),` +
-    `vhor,IF(vdi=vdf,(vfin-vini)*24,IF(NETWORKDAYS.INTL(vdi,vdi,1,${F})=1,(vdi+1-vini)*24,0)` +
-    `+IF(vdf-vdi>1,NETWORKDAYS.INTL(vdi+1,vdf-1,1,${F})*24,0)+IF(NETWORKDAYS.INTL(vdf,vdf,1,${F})=1,(vfin-vdf)*24,0)),` +
-    `IF(vnow>vlim,-vhor,vhor)),"REVISAR Festivos"))`;
+  const habiles = (desde, hasta) => `NETWORKDAYS.INTL(${A(desde, hasta, "1", F)})`;
+
+  // Horas hábiles del intervalo [vini, vfin): el trozo del primer día, los días enteros
+  // intermedios y el trozo del último. Si empieza y acaba el mismo día, es la resta directa.
+  const horas = `IF(${A("vdi=vdf", "(vfin-vini)*24",
+    `IF(${A(`${habiles("vdi", "vdi")}=1`, "(vdi+1-vini)*24", "0")})` +
+    `+IF(${A("vdf-vdi>1", `${habiles("vdi+1", "vdf-1")}*24`, "0")})` +
+    `+IF(${A(`${habiles("vdf", "vdf")}=1`, "(vfin-vdf)*24", "0")})`)})`;
+
+  const calculo = `LET(${A(
+    "vnow", ahora,
+    "vlim", L,
+    "vini", `MIN(${A("vnow", "vlim")})`,
+    "vfin", `MAX(${A("vnow", "vlim")})`,
+    "vdi", "INT(vini)",
+    "vdf", "INT(vfin)",
+    "vhor", horas,
+    `IF(${A("vnow>vlim", "-vhor", "vhor")})`)})`;
+
+  return `=IF(${A(`${L}=""`, '""', `IFERROR(${A(calculo, '"REVISAR Festivos"')})`)})`;
 }
 
 // ---------- Pruebas (spec 00) ----------
@@ -332,6 +377,41 @@ function probarCalendario() {
   igual("letraColumna", [1, 12, 14, 26, 27, 52].map(letraColumna).join(","), "A,L,N,Z,AA,AZ");
 
   // CA-CAL-04b: estado de la pestaña real (solo dentro de Sheets)
+  // CA-CAL-09: la fórmula se escribe en el idioma del archivo. Un separador equivocado la
+  // rompe con #ERROR!, que IFERROR no atrapa, y la columna de horas restantes queda inútil
+  // sin que nada más se entere. Se comprueba la forma de la fórmula con los dos separadores.
+  const separadorPrevio = _separadorFormula;
+  try {
+    [",", ";"].forEach(sep => {
+      _separadorFormula = sep;
+      const f = formulaHorasHabilesRestantes(3, 14);
+      n++;
+      if (f.indexOf(sep) === -1) fallos.push(`fórmula con separador "${sep}": no aparece ni una vez`);
+      n++;
+      const otro = sep === "," ? ";" : ",";
+      // El otro separador no puede colarse: en "REVISAR Festivos" y en los nombres de rango no hay ninguno.
+      if (f.indexOf(otro) !== -1) fallos.push(`fórmula con separador "${sep}": se coló un "${otro}" en ${f}`);
+      n++;
+      let prof = 0, minimo = 0;
+      for (let i = 0; i < f.length; i++) { if (f[i] === "(") prof++; else if (f[i] === ")") { prof--; if (prof < minimo) minimo = prof; } }
+      if (prof !== 0 || minimo < 0) fallos.push(`fórmula con separador "${sep}": paréntesis descuadrados (final ${prof}, mínimo ${minimo})`);
+      n++;
+      // fila 3, columna 14 → la fecha límite está en N3.
+      if (f.indexOf("N3") === -1) fallos.push(`fórmula con separador "${sep}": no apunta a la celda N3 de la fecha límite`);
+      n++;
+      // LET necesita un número impar de argumentos: pares nombre/valor más la expresión final.
+      const dentro = f.slice(f.indexOf("LET(") + 4);
+      let nivel = 0, args = 1;
+      for (let i = 0; i < dentro.length; i++) {
+        const c = dentro[i];
+        if (c === "(") nivel++;
+        else if (c === ")") { if (nivel === 0) break; nivel--; }
+        else if (c === sep && nivel === 0) args++;
+      }
+      if (args % 2 === 0) fallos.push(`fórmula con separador "${sep}": LET recibió ${args} argumentos, debería ser impar`);
+    });
+  } finally { _separadorFormula = separadorPrevio; }
+
   let notaHoja = "";
   try {
     const lectura = leerFestivos();
@@ -348,6 +428,16 @@ function probarCalendario() {
 }
 
 // Compara la fórmula de hoja con horasHabilesEntre usando una hoja temporal (T-00-08). Solo dentro de Sheets.
+// Qué separador de argumentos acepta este archivo, preguntándoselo a Sheets en vez de
+// deducirlo del idioma. Se prueba con SUM(1;2): en un archivo con coma decimal da 3 y en
+// uno con punto decimal da #ERROR!. Con SUM(1,2) no serviría, porque en español se leería
+// como SUM(1,2) = 1,2 y devolvería un número igualmente.
+function separadorSegunLaHoja(hoja) {
+  hoja.getRange(1, 5).setFormula("=SUM(1;2)");
+  SpreadsheetApp.flush();
+  return hoja.getRange(1, 5).getValue() === 3 ? ";" : ",";
+}
+
 function probarFormulaHorasHabiles() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   if (!(leerFestivos().anios[2026] || {}).NACIONAL) generarFestivos(2026);
@@ -357,19 +447,34 @@ function probarFormulaHorasHabiles() {
     [[2026, 10, 16, 10], [2026, 10, 19, 10]], [[2026, 4, 1, 12], [2026, 4, 10, 12]], [[2026, 10, 17, 9], [2026, 10, 18, 21]]
   ];
   const fallos = [];
+  const notas = [];
   try {
+    const real = separadorSegunLaHoja(hoja);
+    const supuesto = separadorDeFormula();
+    let locale = ""; try { locale = ss.getSpreadsheetLocale(); } catch (e) {}
+    notas.push(`Idioma del archivo: ${locale || "desconocido"} · separador de argumentos: "${real}"`);
+    if (real !== supuesto) {
+      notas.push(`La detección automática decía "${supuesto}"; se corrige y se guarda en las propiedades del script.`);
+      fijarSeparadorDeFormula(real);
+    }
+    const S = separadorDeFormula();
+
     casos.forEach(([a, l], i) => {
       const fila = i + 1;
       hoja.getRange(fila, 2).setValue(fechaLocal(...l));
-      hoja.getRange(fila, 1).setFormula(formulaHorasHabilesRestantes(fila, 2, `DATE(${a[0]},${a[1]},${a[2]})+TIME(${a[3]},0,0)`));
+      const ahora = `DATE(${[a[0], a[1], a[2]].join(S)})+TIME(${[a[3], 0, 0].join(S)})`;
+      hoja.getRange(fila, 1).setFormula(formulaHorasHabilesRestantes(fila, 2, ahora));
     });
     SpreadsheetApp.flush();
     casos.forEach(([a, l], i) => {
       const enHoja = hoja.getRange(i + 1, 1).getValue(), enScript = horasHabilesEntre(fechaLocal(...a), fechaLocal(...l));
       if (typeof enHoja !== "number" || Math.abs(enHoja - enScript) > 0.01) fallos.push(`caso ${i + 1}: hoja=${enHoja}, script=${enScript}`);
     });
+    // #ERROR! es un error de análisis, no de cálculo: la fórmula ni siquiera llegó a correr.
+    if (fallos.length === casos.length) notas.push(`Fórmula generada:\n${formulaHorasHabilesRestantes(1, 2)}`);
   } finally { ss.deleteSheet(hoja); }
-  const resumen = fallos.length ? `${fallos.length} de ${casos.length} FALLAN:\n${fallos.join("\n")}` : `${casos.length} casos: fórmula y script coinciden.`;
+  const resumen = [notas.join("\n"), fallos.length ? `${fallos.length} de ${casos.length} FALLAN:\n${fallos.join("\n")}` : `${casos.length} casos: fórmula y script coinciden.`]
+    .filter(Boolean).join("\n");
   mostrarResultado("Prueba fórmula ↔ script", resumen);
   return fallos.length === 0;
 }

@@ -1039,6 +1039,24 @@ function probarCalculo() {
     fallos.push("extraerServicio con solo un grupo debería devolver vacío");
   }
 
+  // El auditor decide qué se pregunta por el título. "Subcategoría Hardware:" contiene
+  // "categor" y se tomaba por la pregunta de categoría: los nueve servicios que cuelgan de
+  // las subcategorías salían como SIN PUNTAJE en los dos formularios, sin serlo.
+  [
+    ["Seleccione el edificio", "edificio"],
+    ["Seleccione la categoría del servicio", "categoria"],
+    ["Ubicación exacta", "ubicacion"],
+    ["Subcategoría Hardware:", "servicio"],
+    ["Subcategoría Software:", "servicio"],
+    ["Subcategoría Conectividad:", "servicio"],
+    ["Subcategoría usuario:", "servicio"],
+    ["SUBCATEGORÍA HARDWARE", "servicio"],
+    ["Cantidad de equipos", "servicio"]
+  ].forEach(([pregunta, esperado]) => {
+    const obtenido = rolDePregunta(pregunta);
+    if (obtenido !== esperado) fallos.push(`rolDePregunta("${pregunta}"): esperado "${esperado}", obtenido "${obtenido}"`);
+  });
+
   // Alias mal apuntados en ALIAS se detectan al construir el índice.
   if (INDICE.AVISOS.length) fallos.push("ALIAS con destinos inexistentes: " + INDICE.AVISOS.join(" | "));
 
@@ -1074,6 +1092,18 @@ function auditarOpcionesFormulario(formId) {
   return r.sinPuntaje;
 }
 
+// Qué se está preguntando, según el título de la pregunta del formulario.
+// "Subcategoría Hardware:" contiene "categor": sin descartarla primero, el auditor la
+// tomaba por la pregunta de categoría y daba SIN PUNTAJE a los nueve servicios que cuelgan
+// de ella, en los dos formularios. Una subcategoría siempre pregunta por un servicio.
+function rolDePregunta(pregunta) {
+  if (/subcategor/i.test(pregunta)) return "servicio";
+  if (/edificio/i.test(pregunta)) return "edificio";
+  if (/ubicaci/i.test(pregunta)) return "ubicacion";
+  if (/categor/i.test(pregunta)) return "categoria";
+  return "servicio";
+}
+
 // Recorre el formulario y devuelve { titulo, filas, sinPuntaje } sin tocar la hoja.
 function filasAuditoriaFormulario(formId) {
   const form = FormApp.openById(formId);
@@ -1091,16 +1121,17 @@ function filasAuditoriaFormulario(formId) {
     else return;
 
     const pregunta = item.getTitle();
+    const rol = rolDePregunta(pregunta);
     opciones.map(c => c.getValue()).forEach(opcion => {
       let resultado, puntos = "", detalle = "";
-      if (/edificio/i.test(pregunta)) {
+      if (rol === "edificio") {
         resultado = "n/a";
-      } else if (/ubicaci/i.test(pregunta)) {
+      } else if (rol === "ubicacion") {
         const r = buscarPuntajeUbicacion(seccion, opcion); // la sección se titula "Edificio 310", etc.
         resultado = r.puntos === null ? "SIN PUNTAJE" : "OK";
         puntos = r.puntos === null ? "" : r.puntos;
         detalle = r.aviso || (normalizarTexto(r.nombre) !== normalizarTexto(opcion) ? `alias de "${r.nombre}"` : "");
-      } else if (/categor/i.test(pregunta)) {
+      } else if (rol === "categoria") {
         resultado = INDICE.SERVICIOS[normalizarTexto(nombreCategoria(opcion))] ? "OK" : "SIN PUNTAJE";
       } else if (esGrupo(opcion)) {
         resultado = "n/a (grupo)";
