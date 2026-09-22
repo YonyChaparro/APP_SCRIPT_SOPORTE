@@ -691,8 +691,9 @@ function limpiarMarcaRevision(hoja, fila) {
 
 // Puntaje por cantidad según ESCALA_CANTIDAD. Toma el primer número del texto
 // ("2 equipos" → 2); sin número o ≤ 0 se trata como el tramo mínimo.
+// El signo entra en la coincidencia: sin él, "-5" se leía como 5 y caía en el tramo 4-14.
 function getPuntajeCantidad(cantidadIngresada) {
-  const m = String(cantidadIngresada == null ? "" : cantidadIngresada).match(/\d+/);
+  const m = String(cantidadIngresada == null ? "" : cantidadIngresada).match(/-?\d+/);
   const num = m ? parseInt(m[0], 10) : 0;
   if (num <= 0) return ESCALA_CANTIDAD[0].puntos;
   return ESCALA_CANTIDAD.find(t => num <= t.hasta).puntos;
@@ -902,6 +903,7 @@ function onOpen() {
       .addItem("Probar todo", "probarTodo")
       .addSeparator()
       .addItem("Cálculo de plazos", "probarCalculo")
+      .addItem("Catálogo de servicios (Excel)", "probarServicios")
       .addItem("Calendario hábil", "probarCalendario")
       .addItem("Reloj hábil", "probarRelojHabil")
       .addItem("Ventana del formulario", "probarVentana")
@@ -991,7 +993,7 @@ function probarTodo() {
   _sinAlertas = true;
   const resultados = [];
   try {
-    [["Cálculo de plazos", probarCalculo], ["Calendario hábil", probarCalendario], ["Reloj hábil", probarRelojHabil], ["Ventana del formulario", probarVentana]]
+    [["Cálculo de plazos", probarCalculo], ["Catálogo de servicios", probarServicios], ["Calendario hábil", probarCalendario], ["Reloj hábil", probarRelojHabil], ["Ventana del formulario", probarVentana]]
       .forEach(([nombre, fn]) => { let ok; try { ok = fn(); } catch (e) { ok = false; Logger.log(`${nombre}: EXCEPCIÓN ${e.message}`); } resultados.push(`${ok ? "✓" : "✗"} ${nombre}`); });
   } finally { _sinAlertas = false; }
   const todoOk = resultados.every(r => r.startsWith("✓"));

@@ -171,9 +171,17 @@ Los cuatro se crean con `configurarTriggers` ([Código.gs:503](Código.gs#L503))
 
 Ordenados por severidad. Cada uno está verificado contra el código y contra los datos reales de la hoja.
 
-### H-01 · Crítico — Las tablas de puntaje no coinciden con las opciones del formulario
+### H-01 · Crítico — El motor de priorización no reconoce buena parte de las opciones del formulario
 
-`getPuntajeUbicacion` y `getPuntajeServicio` hacen coincidencia **exacta** de cadenas (tras `trim().toUpperCase()`). Cualquier diferencia devuelve `0`. Comparando las claves del código con los valores reales registrados en la hoja:
+> **Actualización 15 de septiembre de 2026.** Corregido en `Código.gs` (ver *Corrección aplicada* al final de este hallazgo). El análisis se amplió con el PDF del formulario de producción, que es la referencia: de 38 ubicaciones, 11 no se reconocían (29 %); de 31 servicios, 16 (52 %). Sobre las 31 solicitudes reales del histórico, 15 tenían al menos un componente en cero y 9 (29 %) terminaban con un plazo distinto al correcto. Hay tres causas, no una.
+
+**Causa 1 — estructural: el código tomaba el grupo en vez del servicio.** En la categoría *PC y Portátiles - Revisión y Reparación* el formulario pregunta primero el grupo (`Hardware / Software / Conectividad / Usuario`, columna 14) y luego el servicio concreto (columnas 15–18). `CONFIG.COL.SUBCAT1` incluía la columna 14 y se consultaba antes que `SUBCAT2`, así que el script devolvía `CONECTIVIDAD` y nunca miraba la columna 17. Ese valor no existe en la tabla → 0. Afectaba a las 9 opciones de esa categoría aunque la ortografía fuera perfecta. Evidencia: `FCE-SOP-090` en Pendientes tiene `Servicio = CONECTIVIDAD`.
+
+**Causa 2 — comparación frágil.** `getPuntajeUbicacion` y `getPuntajeServicio` hacían coincidencia **exacta** de cadenas (tras `trim().toUpperCase()`). Tildes, guiones frente a comas y sufijos rompían la igualdad.
+
+**Causa 3 — la tabla se copió de la especificación, no del formulario.** Las claves del código eran una transcripción fiel de `TIEMPOS DE RESPUESTA.xlsx` (mismas mayúsculas, mismas abreviaturas, incluso el error de tipeo `CONTABILILIDAD`). El formulario se redactó con otros nombres: `UIFCE` frente a `UNIDAD DE INFORMÁTICA`, `Sala de Informática 1` frente a `SALA 1`, `Oficinas Docentes 311` frente a `OFICINAS DOCENTES`, `Secretaría de Facultad` frente a `SECRETARÍA ACADÉMICA`, `Otros` frente a `OTRO`. Los **valores** del Excel son correctos y se conservan íntegros (38 ubicaciones, 29 servicios, 4 rangos de cantidad, 8 umbrales de tiempo cotejados sin diferencias); lo que se corrigió son los **nombres**. Además, el grupo *Usuario* del formulario (`Creación de usuarios en Windows`, `Falla de inicio de sesión en Windows`) no existe en el Excel: se les asignó 10 y 5 de forma provisional, pendiente de que la especificación los incorpore.
+
+Ejemplos de la causa 2 y 3 comparando claves del código con valores reales de la hoja:
 
 | Valor real en la hoja | Clave en el código | Resultado |
 |---|---|---|
@@ -186,9 +194,27 @@ Ordenados por severidad. Cada uno está verificado contra el código y contra lo
 | `Vicedecanatura de Investigación y Extensión` | `VICEDECANATURA DE INVESTIGACIÓN Y EXT.` [44](Código.gs#L44) | 0 — abreviatura |
 | `Oficinas Docentes 311` | `OFICINAS DOCENTES` [28](Código.gs#L28) | 0 — sufijo de edificio |
 
-**Efecto:** una solicitud cuya ubicación y servicio fallan ambos obtiene puntaje 0 + 1 (cantidad) = 1 → **`24 HORAS`**, el SLA más exigente, sin relación con la prioridad real. El motor de priorización queda neutralizado de forma silenciosa, porque `|| 0` no deja rastro de error.
+**Efecto:** cada componente no reconocido resta puntos y **acorta el plazo uno o dos niveles** (falsa urgencia). Solo cuando fallan ubicación y servicio a la vez la solicitud cae a `24 HORAS`; en los datos reales eso ocurrió una vez (`FCE-SOP-085`). El fallo es silencioso porque `|| 0` no deja rastro.
 
-Confirmado en datos: `FCE-SOP-087` (Biblioteca + `Equipo sin internet - No navega`) debería puntuar 20+5+1=26 → `72 HORAS`; con el fallo puntúa 20+0+1=21 → `48 HORAS`.
+Casos confirmados en datos: `FCE-SOP-080` (35 impresoras, mantenimiento preventivo) debía ser `NO ESTABLECIDO` y quedó en `10 DIAS`; `FCE-SOP-079`, `15 DIAS` → `72 HORAS`; `FCE-SOP-062` (UIFCE, bajas), `DURANTE EL SEMESTRE` → `15 DIAS`; `FCE-SOP-085`, `72 HORAS` → `24 HORAS`. *(Nota: la versión anterior de este informe usaba `FCE-SOP-087` como ejemplo; ese cálculo estaba mal: con el fallo daba 21 → `72 HORAS`, el mismo plazo que el correcto.)*
+
+**Corrección aplicada (15 de septiembre de 2026):**
+
+- La columna 14 se declara como `GRUPO_REVISION` y queda fuera de la búsqueda de servicio; `CONFIG.COL.SERVICIO` lista solo las columnas de subpregunta.
+- `PUNTAJES` se reescribió con los valores de `TIEMPOS DE RESPUESTA.xlsx` y los nombres literales del formulario de producción, con los servicios agrupados por categoría (elimina los casos especiales de `OTRO` y `MANTENIMIENTO PREVENTIVO`, que valían distinto según la categoría). `Secretaría Académica` (formulario de pruebas) es alias de `Secretaría de Facultad`. Las categorías `INSTALACIÓN Y ALISTAMIENTO` (25) y `CAMBIO DE UBICACIÓN` (20), que en el formulario no tienen subpregunta, resuelven su único servicio de forma implícita.
+- La comparación pasa por `normalizarTexto` (sin tildes, puntuación ni mayúsculas). `HORAS_TIEMPO` se consulta igual, lo que resuelve también el `5 DÍAS` de H-03.
+- Una opción no reconocida ya no vale 0: recibe `PUNTAJE_SIN_COINCIDENCIA` (10), la fila queda marcada en amarillo con nota en Pendientes y se avisa al administrador.
+- `onEditTrigger` usa el mismo `calcularPuntaje` que `onFormSubmit` (antes duplicaba la lógica con otro valor por defecto).
+- Menú **Soporte** con `probarCalculo` (53 casos de regresión: las 31 solicitudes reales, las mismas escritas con los nombres del Excel, opciones aún no usadas y datos incompletos), `auditarOpcionesFormulario` (cruza cada opción del formulario de producción o de pruebas contra las tablas y escribe la hoja `Auditoría_Formulario`) y `recalcularPendientes`.
+
+**Robustez ante discrepancias entre las tres fuentes** (Excel, formulario de producción, formulario de pruebas), añadida el mismo día:
+
+- `ALIAS`: cualquier nombre con que alguna de las tres fuentes designe una ubicación, categoría o servicio resuelve al mismo puntaje (`SALA 1` = `Sala de Informática 1`, `SERVIDORES` = `Servidor web y bases de datos`, `OTRO` = `Otros` en Impresoras, etc.). Un alias que apunte a una clave inexistente se reporta en `probarCalculo`.
+- `detectarColumnas`: las columnas de la hoja de respuestas se localizan por su **encabezado**, no por posición. Si el formulario gana, pierde o mueve preguntas, el script se adapta; `CONFIG.COL` queda solo como respaldo. Las columnas propias del script (`RADICADO`, `ESTADO`, `FECHA NOTIFICACIÓN`, `RESUELTO POR`, `COMENTARIO RESOLUCIÓN`) se etiquetan en su primera ejecución y, si su posición la ocupa una pregunta, se crean al final: nunca se escribe sobre datos del formulario.
+- `GRUPOS_NO_SERVICIO`: los selectores `Hardware / Software / Conectividad / Usuario` se descartan por su **valor**, en cualquier columna en que aparezcan. Ya no depende de que la pregunta 12 esté en la columna 14.
+- Ubicación con respaldo entre edificios: si el edificio viene vacío o mal, pero la oficina existe en un único edificio, se usa con aviso. Si es ambigua (`Oficinas Docentes` sin número existe en 311 y 238), queda marcada.
+- `ESCALA_TIEMPOS` y `ESCALA_CANTIDAD`: una sola tabla por escala, copia literal de las pestañas del Excel, de la que se derivan etiqueta, horas y umbrales. Antes había tres definiciones separadas (`TIEMPOS`, `HORAS_TIEMPO`, `calcularTiempo`) que podían desalinearse.
+- `onEditTrigger` opera sobre la hoja del evento (`e.range.getSheet()`), no sobre la hoja activa.
 
 ### H-02 · Crítico — La bandeja está desincronizada del histórico
 
@@ -270,7 +296,7 @@ La hoja de pruebas contiene correos institucionales y teléfonos reales (`aruizb
 
 **Correcciones de fondo**
 
-4. Sustituir la coincidencia exacta de cadenas por normalización (sin tildes, sin puntuación) o, mejor, por códigos estables en el formulario en lugar de etiquetas legibles. Resuelve H-01 y H-03 de raíz.
+4. ~~Sustituir la coincidencia exacta de cadenas por normalización (sin tildes, sin puntuación).~~ **Hecho el 15 de septiembre de 2026** (ver H-01). Pendiente de decisión funcional: (a) el formulario de **producción** no ofrece las categorías `INSTALACIÓN Y ALISTAMIENTO` y `CAMBIO DE UBICACIÓN`, que el Excel y el formulario de pruebas sí tienen; (b) el grupo *Usuario* del formulario no está en el Excel; (c) `Secretaría Académica` (pruebas) frente a `Secretaría de Facultad` (producción). Una vez alineados Excel y formularios, ejecutar *Soporte > Auditar formulario* y *Probar cálculo de plazos*; ambos deben quedar sin observaciones.
 5. Reemplazar el radicado por fila por un contador en `PropertiesService` con `LockService`. Resuelve H-08.
 6. Implementar el archivado antes de `deleteRow`. Resuelve H-04.
 7. Sustituir el `ui.alert` por una columna de confirmación o una casilla de verificación. Resuelve H-05.
@@ -281,6 +307,7 @@ La hoja de pruebas contiene correos institucionales y teléfonos reales (`aruizb
 9. Declarar `oauthScopes` explícitos en el manifiesto.
 10. Eliminar el despliegue sin uso.
 11. Añadir un `onOpen` con menú para `configurarTriggers`, hoy invisible para el usuario final.
+
 ---
 
 ## 12. Calendario hábil, reloj hábil y ventana del formulario (17 de septiembre de 2026)
@@ -319,4 +346,52 @@ Regla generalizada: cierra a las 15:30 de todo día hábil seguido de uno no há
 ### 12.6 Pruebas
 
 `Soporte → Pruebas → Probar todo` ejecuta las cinco suites (5.705 casos) sin tocar formulario ni disparadores reales. `Fórmula de horas hábiles ↔ script` compara la fórmula de la hoja con el cálculo del script en una hoja temporal. Las mismas suites corren en Node con un arnés que simula los servicios de Google (`tests/`, `npm test`).
+
+---
+
+## 13. Verificación exhaustiva del catálogo de servicios (22 de septiembre de 2026)
+
+### 13.1 Qué se probó y por qué
+
+`PUNTAJES`, `ESCALA_CANTIDAD` y `ESCALA_TIEMPOS` son una transcripción manual de las cuatro pestañas de puntaje de `TIEMPOS DE RESPUESTA.xlsx`. Esa transcripción no tenía verificación: una edición del Excel o del código podía dejarlas divergentes sin señal alguna, y el efecto —un plazo mal asignado— es invisible hasta que alguien reclama.
+
+`Servicios.gs` cierra ese hueco. Contiene un **oráculo independiente**: las cuatro pestañas transcritas otra vez, a mano, en `CAT_UBICACIONES` (38), `CAT_SERVICIOS` (31), `CAT_CANTIDAD` (4) y `CAT_TIEMPOS` (8). El archivo no lee `PUNTAJES` para construir sus expectativas; la duplicación es el mecanismo de la prueba, no un descuido. `probarServicios()` compara las dos fuentes y, cuando difieren, nombra la fila exacta.
+
+### 13.2 Bloques de la suite (5.530 casos)
+
+| Bloque | Qué verifica |
+|---|---|
+| B1 | Los 8 tramos de `TIEMPOS DE RESPUESTA` en sus fronteras (1, 10, 11, 20, … 70, 71, 200, 1000) y las horas asociadas a cada etiqueta |
+| B2 | Los 4 tramos de `CANTIDAD DE EQUIPOS` en sus fronteras, escritos como número y como texto libre («14 equipos»), más entradas degeneradas (vacío, 0, negativo, nulo, texto sin número) |
+| B3 | Las 38 ubicaciones × cada grafía (Excel, canónica, alias) × cada forma de escribir el edificio (`310`, `ED_310`, `Edificio 310`, numérico): puntaje, nombre canónico resuelto y ausencia de aviso |
+| B4 | Los 31 servicios × cada grafía × cada grafía de su categoría (nombre largo del Excel con descripción, nombre corto, rango con nombre de `tabla_serv`, canónico) |
+| B5 | Los selectores de grupo (`Hardware`, `Software`, `Internet y Conectividad`, `Usuario`) nunca puntúan como servicio, ni solos ni acompañando al servicio real en otra columna |
+| B6 | Las 3 categorías de opción única resuelven con servicio vacío; las 7 de opción múltiple **no** adivinan y avisan |
+| B7 | Homónimos: cada texto que aparece con puntajes distintos en varias categorías resuelve según su categoría, y queda sin resolver cuando la categoría no se reconoce |
+| B8 | Matriz completa 38 ubicaciones × 31 servicios × 4 tramos = **4.712 casos**: suma de componentes y etiqueta de plazo contra el oráculo del Excel |
+| B9 | Completitud bidireccional: ninguna entrada del Excel falta en `PUNTAJES` y ninguna entrada de `PUNTAJES` sobra respecto del catálogo, en ubicaciones, servicios y categorías |
+| B10 | Robustez: entradas desconocidas, vacías y nulas nunca dan 0 ni etiqueta vacía; ubicación en el edificio equivocado se resuelve pero deja aviso; nombres ambiguos entre edificios quedan sin resolver |
+| B11 | Todo servicio del catálogo aparece en `LISTA_SERVICIOS` (desplegable de la bandeja) |
+
+### 13.3 Prueba de mutación
+
+Una suite que siempre pasa no demuestra nada. `tests/mutacion.js` introduce ocho averías realistas de una en una en `Código.gs` —un puntaje cambiado, una frontera de escala corrida, un alias borrado, un grupo retirado de `GRUPOS_NO_SERVICIO`, `PUNTAJE_SIN_COINCIDENCIA` de vuelta a 0— y verifica que la suite falla en cada caso. **8/8 detectadas.** El script restaura el archivo al terminar, incluso si aborta.
+
+La octava mutación expuso un defecto de la propia suite: la aserción del puntaje neutro se comparaba contra `PUNTAJE_SIN_COINCIDENCIA`, de modo que cambiar la constante no la hacía fallar. Se reemplazó por el contrato de **H-01**: la constante debe ser estrictamente positiva y una solicitud enteramente irreconocible no puede caer en el tramo más urgente.
+
+### 13.4 Hallazgo
+
+#### H-13 · Bajo — Cantidad negativa saltaba de tramo *(corregido)*
+
+`getPuntajeCantidad` extraía el número con `/\d+/`, que no captura el signo: `-5` se leía como `5` y devolvía 10 puntos (tramo «4 A 14») en lugar del tramo mínimo, contradiciendo el contrato documentado en el propio comentario de la función («sin número o ≤ 0 se trata como el tramo mínimo»). Corregido a `/-?\d+/` en `Código.gs:695`. Impacto real bajo —requiere que alguien escriba un negativo en «cantidad de equipos»— y no hay constancia de que haya ocurrido; se corrige porque el comportamiento no coincidía con la intención declarada.
+
+### 13.5 Puntos abiertos que la suite deja documentados
+
+Ninguno es un defecto del código: son decisiones que corresponden al responsable del proceso.
+
+1. **Dos servicios sin respaldo en el Excel.** El grupo «Usuario» del formulario («Creación de usuarios en Windows» → 10, «Falla de inicio de sesión en Windows» → 5) no existe en el árbol de servicios. Están marcados con `extension: true` en `CAT_SERVICIOS` y B9 exige que sigan siendo exactamente dos: si el formulario agrega una opción sin respaldo documental, la suite lo detecta. Falta oficializar esos dos puntajes en el Excel.
+2. **Error de dedo en el Excel.** La fila «OFICINA AREA C. DE CONTABILILIDAD Y F.» (debería decir CONTABILIDAD). El código acepta ambas grafías; conviene corregir el original.
+3. **Nombres ambiguos entre edificios.** «OFICINAS DOCENTES» existe en 311 (20 puntos) y en 238 (10). Solo el edificio los distingue: si esa columna llega vacía, la solicitud queda sin resolver y marcada para revisión. Es el comportamiento correcto, pero conviene que el formulario haga obligatorio el edificio.
+4. **Homónimos entre categorías.** «Mantenimiento Preventivo» (30 en impresoras, 10 en video) y «Otro» (20 en impresoras vía alias `Otros`, 10 en software y en video). Se resuelven bien mientras la categoría llegue; sin ella quedan sin resolver, como debe ser.
+
 

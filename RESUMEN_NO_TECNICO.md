@@ -112,6 +112,24 @@ Se implementaron dos mejoras pedidas por la Unidad:
 
 Lo que falta para dejarlo funcionando en la hoja de pruebas está en `specs/README.md` (cinco pasos desde el menú Soporte).
 
+## Novedades del 22 de septiembre de 2026
+
+**Se probó, uno por uno, todo el catálogo de servicios.** El archivo *TIEMPOS DE RESPUESTA.xlsx* es el documento donde la Unidad decidió cuánto pesa cada oficina, cada servicio y cada cantidad de equipos. Hasta ahora el programa copiaba esas tablas, pero nadie verificaba que la copia siguiera igual al original.
+
+Ahora hay una prueba que compara las dos cosas, casilla por casilla: **las 38 ubicaciones, los 31 servicios y los 4 tramos de cantidad**, en todas sus combinaciones y en todas las formas en que cada nombre puede llegar escrito (como está en el Excel, como lo escribe el formulario, con o sin tildes). Son **5.530 comprobaciones** que corren en un segundo desde *Soporte → Pruebas → Catálogo de servicios*.
+
+Qué significa en la práctica:
+
+- Si alguien cambia un puntaje en el Excel y no en el programa —o al revés— la prueba lo dice y señala exactamente qué fila difiere. Antes esa diferencia podía pasar meses sin que nadie la notara.
+- Se verificó que los nombres repetidos se resuelven bien. «Mantenimiento Preventivo» vale 30 puntos en impresoras y 10 en videoproyectores; «Otro» vale 20 en impresoras y 10 en software. El programa distingue los dos casos.
+- Se verificó que ninguna solicitud puede quedar marcada como urgente por error. Si llega con una opción que el programa no conoce, recibe un plazo intermedio y queda marcada en amarillo para revisión, nunca el plazo más corto.
+
+**Un error encontrado y corregido.** Si en «cantidad de equipos» alguien escribía un número negativo (`-5`), el programa ignoraba el signo, lo leía como 5 y asignaba el puntaje del tramo «4 a 14» en lugar del mínimo. No hay constancia de que haya ocurrido en una solicitud real, pero ya no puede pasar.
+
+**Las pruebas ahora también corren fuera de Google.** Antes había que abrir la hoja para ejecutarlas; ahora se lanzan desde la terminal con un comando, lo que permite verificarlas en cada cambio. Y hay una prueba que comprueba que las pruebas sirven: introduce ocho errores a propósito y confirma que los ocho se detectan.
+
+Dos puntos que siguen esperando decisión de la Unidad, porque son de criterio y no de programación: las dos opciones del grupo «Usuario» del formulario (crear usuario de Windows, falla de inicio de sesión) **no existen en el Excel** y hoy usan un puntaje provisional; y el Excel trae «Oficina Area C. de Contabililidad y F.» con un error de dedo que conviene corregir en el original.
+
 ## Qué se recomienda hacer
 
 **Primero, proteger lo que hay** *(rápido, sin riesgo)*
