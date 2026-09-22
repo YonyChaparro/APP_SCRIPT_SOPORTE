@@ -274,13 +274,20 @@ function fijarSeparadorDeFormula(sep) {
 }
 
 // Horas hábiles restantes hasta la celda de fecha límite (negativas si vencida). `ahoraExpr`
-// permite fijar el instante en pruebas; por defecto NOW(). Debe recibirse ya escrita con el
-// separador de este archivo (ver separadorDeFormula).
+// permite fijar el instante en pruebas; por defecto NOW().
+//
+// La fecha límite se toma con INDIRECT(columna & ROW()) y no con una referencia directa
+// (`N7`) a propósito: la bandeja se reordena por fecha límite en cada solicitud nueva, y
+// `Range.sort()` mueve las fórmulas sin reescribir de forma fiable las referencias. Una
+// fórmula que decía `N7` acababa en otra fila leyendo la fecha límite de una fila ajena;
+// cuando esa celda estaba vacía, el guardia devolvía "" y la columna aparecía en blanco
+// (H-16). Con ROW() la fórmula es idéntica en todas las filas y siempre lee la suya.
+//
 // Nombres de variable que no coinciden con funciones de Sheets en ningún idioma ("n" chocaba con N()).
-function formulaHorasHabilesRestantes(fila, columnaLimite, ahoraExpr) {
+function formulaHorasHabilesRestantes(columnaLimite, ahoraExpr) {
   const S = separadorDeFormula();
   const A = function () { return Array.prototype.slice.call(arguments).join(S); };
-  const L = `${letraColumna(columnaLimite)}${fila}`;
+  const L = `INDIRECT("${letraColumna(columnaLimite)}"&ROW())`;
   const F = `'${CONFIG.HOJAS.FESTIVOS}'!$A$2:$A`;
   const ahora = ahoraExpr || "NOW()";
   const habiles = (desde, hasta) => `NETWORKDAYS.INTL(${A(desde, hasta, "1", F)})`;
@@ -302,7 +309,9 @@ function formulaHorasHabilesRestantes(fila, columnaLimite, ahoraExpr) {
     "vhor", horas,
     `IF(${A("vnow>vlim", "-vhor", "vhor")})`)})`;
 
-  return `=IF(${A(`${L}=""`, '""', `IFERROR(${A(calculo, '"REVISAR Festivos"')})`)})`;
+  // Sin fecha límite (celda vacía o con texto) no hay nada que contar. Se comprueba con
+  // ISNUMBER porque una celda vacía leída con INDIRECT llega como 0, no como "".
+  return `=IF(${A(`NOT(ISNUMBER(${L}))`, '""', `IFERROR(${A(calculo, '"REVISAR Festivos"')})`)})`;
 }
 
 // ---------- Pruebas (spec 00) ----------
@@ -384,7 +393,7 @@ function probarCalendario() {
   try {
     [",", ";"].forEach(sep => {
       _separadorFormula = sep;
-      const f = formulaHorasHabilesRestantes(3, 14);
+      const f = formulaHorasHabilesRestantes(14);
       n++;
       if (f.indexOf(sep) === -1) fallos.push(`fórmula con separador "${sep}": no aparece ni una vez`);
       n++;
@@ -396,8 +405,13 @@ function probarCalendario() {
       for (let i = 0; i < f.length; i++) { if (f[i] === "(") prof++; else if (f[i] === ")") { prof--; if (prof < minimo) minimo = prof; } }
       if (prof !== 0 || minimo < 0) fallos.push(`fórmula con separador "${sep}": paréntesis descuadrados (final ${prof}, mínimo ${minimo})`);
       n++;
-      // fila 3, columna 14 → la fecha límite está en N3.
-      if (f.indexOf("N3") === -1) fallos.push(`fórmula con separador "${sep}": no apunta a la celda N3 de la fecha límite`);
+      // La columna 14 es la N. La fila NO puede estar escrita a fuego: la bandeja se
+      // reordena y la fórmula tiene que seguir leyendo su propia fila (H-16).
+      if (f.indexOf('INDIRECT("N"&ROW())') === -1) fallos.push(`fórmula con separador "${sep}": no lee la fecha límite con INDIRECT("N"&ROW())`);
+      n++;
+      if (/[A-Z]\$?\d+(?![\d)])/.test(f.replace(/\$A\$2:\$A/g, "").replace(/NETWORKDAYS\.INTL/g, ""))) {
+        fallos.push(`fórmula con separador "${sep}": lleva una referencia a una fila concreta y no sobrevivirá a un reordenamiento: ${f}`);
+      }
       n++;
       // LET necesita un número impar de argumentos: pares nombre/valor más la expresión final.
       const dentro = f.slice(f.indexOf("LET(") + 4);
@@ -463,7 +477,7 @@ function probarFormulaHorasHabiles() {
       const fila = i + 1;
       hoja.getRange(fila, 2).setValue(fechaLocal(...l));
       const ahora = `DATE(${[a[0], a[1], a[2]].join(S)})+TIME(${[a[3], 0, 0].join(S)})`;
-      hoja.getRange(fila, 1).setFormula(formulaHorasHabilesRestantes(fila, 2, ahora));
+      hoja.getRange(fila, 1).setFormula(formulaHorasHabilesRestantes(2, ahora));
     });
     SpreadsheetApp.flush();
     casos.forEach(([a, l], i) => {
@@ -471,7 +485,7 @@ function probarFormulaHorasHabiles() {
       if (typeof enHoja !== "number" || Math.abs(enHoja - enScript) > 0.01) fallos.push(`caso ${i + 1}: hoja=${enHoja}, script=${enScript}`);
     });
     // #ERROR! es un error de análisis, no de cálculo: la fórmula ni siquiera llegó a correr.
-    if (fallos.length === casos.length) notas.push(`Fórmula generada:\n${formulaHorasHabilesRestantes(1, 2)}`);
+    if (fallos.length === casos.length) notas.push(`Fórmula generada:\n${formulaHorasHabilesRestantes(2)}`);
   } finally { ss.deleteSheet(hoja); }
   const resumen = [notas.join("\n"), fallos.length ? `${fallos.length} de ${casos.length} FALLAN:\n${fallos.join("\n")}` : `${casos.length} casos: fórmula y script coinciden.`]
     .filter(Boolean).join("\n");

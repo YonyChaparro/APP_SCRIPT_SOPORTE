@@ -551,3 +551,33 @@ Segunda ejecución tras corregir H-14 y H-15, instalar los disparadores desde el
 Con eso queda verificado dentro de Sheets todo lo que `specs/README.md` tenía pendiente desde el 17 de septiembre: festivos de 2026 y 2027 generados, las seis suites en verde **en el entorno real** (44.372 casos), la fórmula de la hoja coincidiendo con el script, la bandeja migrada con `INICIO RELOJ` y `FECHA LÍMITE`, los seis disparadores instalados, la ventana en el estado que dicta la regla y las opciones de los dos formularios con puntaje.
 
 Los disparadores siguen sin instalarse desde la verificación: `configurarTriggers()` borra todos los existentes y manda correo, así que se ejecuta aparte y la verificación se limita a confirmar el resultado.
+
+---
+
+## 17. H-16 — La columna de horas restantes se vaciaba al llegar una solicitud nueva
+
+Reportado en uso, después de que la verificación cerrara en verde: `HORAS HÁBILES RESTANTES` aparecía en blanco en las solicitudes nuevas.
+
+### Causa
+
+`formulaHorasHabilesRestantes(fila, columnaLimite)` escribía la fila **a fuego**: la fila 7 recibía `=IF(N7="", …)`. Justo después de escribirla, `onFormSubmit` llama a `ordenarPendientesPorPrioridad()`, que ordena la bandeja por fecha límite con `Range.sort()`. Al mover las filas, las fórmulas viajan sin que sus referencias se reescriban de forma fiable: una fórmula que decía `N7` termina en otra fila leyendo la fecha límite de una fila ajena.
+
+El síntoma es engañoso porque **no da error**. El primer término de la fórmula era `IF(N7="","",…)`: si la celda a la que acaba apuntando está vacía, devuelve cadena vacía y la celda simplemente se ve en blanco. No hay `#REF!`, ni `#ERROR!`, ni nada que delate el problema; la columna miente en silencio.
+
+Es un defecto latente desde que se escribió la fórmula (spec 01). Solo se hizo visible ahora porque hasta H-14 la columna entera mostraba `#ERROR!` y tapaba este segundo fallo.
+
+### Corrección
+
+La fecha límite se lee con `INDIRECT("N"&ROW())`. La fórmula pasa a ser **idéntica en todas las filas** y siempre lee la suya, así que reordenar la bandeja deja de afectarla.
+
+El guardia cambia de `N7=""` a `NOT(ISNUMBER(…))`: una celda vacía leída con `INDIRECT` llega como `0`, no como `""`, de modo que la comparación anterior habría dejado de proteger. `ISNUMBER` cubre además el caso de que alguien escriba texto en la fecha límite.
+
+`INDIRECT` es volátil y no se recalcula con la eficiencia de una referencia directa; en una bandeja de solicitudes pendientes —decenas de filas— es irrelevante frente a la garantía de que la columna dice la verdad.
+
+### Pruebas
+
+- CA-CAL-09 exige que la fórmula lea su fila con `INDIRECT("N"&ROW())` y, además, que **no contenga ninguna referencia a una fila concreta**: cualquier vuelta atrás la deja en rojo aunque se escriba de otra manera.
+- Dos mutaciones: volver a fijar el número de fila, y descuadrar los paréntesis.
+- **Paso 9b del informe de verificación**, nuevo: recorre la columna celda por celda en la hoja real y compara cada fórmula con la que el script escribe hoy. Distingue tres fallos que a simple vista son el mismo —celda sin fórmula, fórmula distinta de la esperada, y fórmula que no devuelve un número— y señala la fila y el radicado. Las filas sin fecha límite se cuentan aparte, porque ahí el blanco es correcto.
+
+El paso 9b es la lección de fondo: la verificación daba 13/13 en verde mientras esta columna estaba rota, porque ningún paso miraba el **contenido** de las celdas calculadas, solo los datos. Una columna de fórmulas necesita que alguien compruebe las fórmulas.

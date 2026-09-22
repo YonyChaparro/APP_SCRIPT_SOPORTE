@@ -63,7 +63,7 @@ function escribirRelojEnFila(hoja, fila, COLP, tiempo, reloj) {
   hoja.getRange(fila, COLP.TIEMPO).setValue(tiempo);
   hoja.getRange(fila, COLP.INICIO_RELOJ).setValue(reloj.inicio).setNumberFormat("dd/mm/yyyy hh:mm");
   hoja.getRange(fila, COLP.FECHA_LIMITE).setValue(reloj.limite).setNumberFormat("dd/mm/yyyy hh:mm");
-  hoja.getRange(fila, COLP.HORAS_RESTANTES).setFormula(formulaHorasHabilesRestantes(fila, COLP.FECHA_LIMITE)).setNumberFormat("0.00");
+  hoja.getRange(fila, COLP.HORAS_RESTANTES).setFormula(formulaHorasHabilesRestantes(COLP.FECHA_LIMITE)).setNumberFormat("0.00");
 }
 
 // ---------- Pruebas (spec 01) ----------

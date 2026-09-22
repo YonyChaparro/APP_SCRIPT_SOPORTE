@@ -232,6 +232,42 @@ function verificarBandeja() {
   return { estado: sinLimite || fechaMala ? "AVISO" : "OK", detalle };
 }
 
+// La columna de horas restantes es una fórmula, no un valor: si se rompe, la celda se ve
+// vacía y nada más se entera. Se revisa celda por celda contra la fórmula que el script
+// escribe hoy, que es idéntica en todas las filas.
+function verificarColumnaHorasRestantes() {
+  const hoja = getHoja(CONFIG.HOJAS.PENDIENTES);
+  if (!hoja || hoja.getLastRow() <= 1) return { estado: "OK", detalle: "La bandeja está vacía." };
+  const COLP = detectarColumnasPendientes(hoja);
+  const n = hoja.getLastRow() - 1;
+  const formulas = hoja.getRange(2, COLP.HORAS_RESTANTES, n, 1).getFormulas();
+  const valores = hoja.getRange(2, COLP.HORAS_RESTANTES, n, 1).getValues();
+  const limites = hoja.getRange(2, COLP.FECHA_LIMITE, n, 1).getValues();
+  const codigos = hoja.getRange(2, COLP.CODIGO, n, 1).getValues();
+  const esperada = formulaHorasHabilesRestantes(COLP.FECHA_LIMITE);
+
+  const problemas = [];
+  let correctas = 0, sinLimite = 0;
+  for (let i = 0; i < n; i++) {
+    const codigo = codigos[i][0];
+    if (!codigo) continue;
+    const fila = i + 2, f = formulas[i][0], v = valores[i][0];
+    if (!esFechaValida(limites[i][0])) { sinLimite++; continue; }
+    if (!f) problemas.push(`fila ${fila} (${codigo}): la celda no tiene fórmula (valor fijo o vacía)`);
+    else if (f !== esperada) problemas.push(`fila ${fila} (${codigo}): fórmula distinta de la que escribe el script → ${f.slice(0, 90)}…`);
+    else if (typeof v !== "number") problemas.push(`fila ${fila} (${codigo}): la fórmula no devuelve un número, devuelve ${JSON.stringify(v)}`);
+    else correctas++;
+  }
+
+  const detalle = [
+    `${correctas} de ${correctas + problemas.length} filas con fecha límite calculan bien.`,
+    sinLimite ? `${sinLimite} fila(s) sin fecha límite: su celda queda vacía a propósito.` : "",
+    problemas.length ? problemas.join("\n") : "",
+    problemas.length ? "Se arregla con «Soporte → Recalcular plazos de pendientes»." : ""
+  ].filter(Boolean).join("\n");
+  return { estado: problemas.length ? "ERROR" : "OK", detalle };
+}
+
 function verificarTriggers() {
   const esperados = ["onFormSubmit", "onEditTrigger", "verificarSolicitudesVencidas", "generarReporteSemanal", "programarVentana", "reconciliarVentana"];
   const instalados = ScriptApp.getProjectTriggers().map(t => t.getHandlerFunction());
@@ -332,6 +368,7 @@ function ejecutarVerificacion(opciones) {
 
   if (escribir) pasos.push(pasoSeguro("Diagnóstico", "9. Bandeja tras el recálculo", verificarBandeja));
 
+  pasos.push(pasoSeguro("Diagnóstico", "9b. Columna de horas restantes", verificarColumnaHorasRestantes));
   pasos.push(pasoSeguro("Diagnóstico", "10. Disparadores", verificarTriggers));
   pasos.push(pasoSeguro("Diagnóstico", "11. Ventana del formulario", verificarVentana));
   pasos.push(pasoSeguro("Diagnóstico", "12. Opciones de los formularios", verificarFormularios));

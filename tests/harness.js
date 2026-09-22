@@ -35,6 +35,15 @@ function hojaSimulada(nombre, valores) {
       return this;
     },
     setValue(v) { return this.setValues([[v]]); },
+    // El simulador guarda el texto de la fórmula pero no la evalúa: basta para comprobar
+    // qué fórmula se escribió, no cuánto da.
+    setFormula(f) { return this.setValues([[f]]); },
+    getFormulas: () => Array.from({ length: nFilas }, (_, i) =>
+      Array.from({ length: nCols }, (_, j) => {
+        const fl = datos[fila - 1 + i];
+        const val = fl && fl[col - 1 + j] !== undefined ? fl[col - 1 + j] : "";
+        return typeof val === "string" && val.charAt(0) === "=" ? val : "";
+      })),
     setBackground() { return this; },
     setNote() { return this; },
     clearNote() { return this; },

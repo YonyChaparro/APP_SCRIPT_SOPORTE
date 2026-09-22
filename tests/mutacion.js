@@ -74,8 +74,11 @@ const MUTACIONES = [
                            'const habiles = (desde, hasta) => `NETWORKDAYS.INTL(${[desde, hasta, "1", F].join(",")})`;']] },
   { descripcion: "LET pierde un nombre y queda con argumentos pares", suite: "calendario",
     cambios: [[CALENDARIO, '    "vdi", "INT(vini)",\n', '    "INT(vini)",\n']] },
+  { descripcion: "regresión de H-16: la fórmula vuelve a fijar el número de fila", suite: "calendario",
+    cambios: [[CALENDARIO, 'const L = `INDIRECT("${letraColumna(columnaLimite)}"&ROW())`;',
+                           'const L = `${letraColumna(columnaLimite)}7`;']] },
   { descripcion: "paréntesis de más en la fórmula", suite: "calendario",
-    cambios: [[CALENDARIO, 'return `=IF(${A(`${L}=""`', 'return `=IF((${A(`${L}=""`']] },
+    cambios: [[CALENDARIO, 'return `=IF(${A(`NOT(ISNUMBER(${L}))`', 'return `=IF((${A(`NOT(ISNUMBER(${L}))`']] },
 
   // --- Auditoría de los formularios (suite probarCalculo) ---
   { descripcion: "«Subcategoría X» vuelve a tomarse por la pregunta de categoría", suite: "calculo",
