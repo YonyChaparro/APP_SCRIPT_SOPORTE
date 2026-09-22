@@ -919,6 +919,7 @@ function onOpen() {
       .addItem("Suspender programación", "suspenderProgramacion")
       .addItem("Reanudar programación", "reanudarProgramacion"))
     .addSeparator()
+    .addItem("Verificación completa…", "verificacionCompleta")
     .addItem("Generar festivos del año…", "generarFestivosDesdeMenu")
     .addItem("Recalcular plazos de pendientes", "recalcularPendientes")
     .addItem("Configurar triggers", "configurarTriggers")
@@ -983,8 +984,12 @@ const CASOS_PRUEBA = [
 // Ejecuta CASOS_PRUEBA y verifica además que una opción desconocida no dé 0 sino aviso.
 // Muestra el resultado de una prueba: siempre en el log; en pantalla salvo cuando corre "Probar todo".
 let _sinAlertas = false;
+// Cuando vale un array, mostrarResultado escribe ahí en vez de abrir la interfaz. Lo usa
+// el informe de verificación (Verificacion.gs) para recoger la salida de cada suite.
+let _capturaResultados = null;
 function mostrarResultado(titulo, texto) {
   Logger.log(texto);
+  if (_capturaResultados) { _capturaResultados.push({ titulo, texto }); return; }
   if (_sinAlertas) return;
   try { SpreadsheetApp.getUi().alert(titulo, texto, SpreadsheetApp.getUi().ButtonSet.OK); } catch (e) {}
 }
@@ -1061,6 +1066,16 @@ function auditarFormularioPruebas() { auditarOpcionesFormulario(CONFIG.FORMULARI
 // tenga puntaje. Escribe el resultado en la hoja Auditoría_Formulario.
 // Ejecutar cada vez que se edite el formulario.
 function auditarOpcionesFormulario(formId) {
+  const r = filasAuditoriaFormulario(formId);
+  escribirAuditoria(r.filas);
+  const resumen = `${r.titulo}: ${r.filas.length} opciones revisadas, ${r.sinPuntaje} sin puntaje. Ver hoja ${CONFIG.HOJAS.AUDITORIA}.`;
+  Logger.log(resumen);
+  try { SpreadsheetApp.getActiveSpreadsheet().toast(resumen, "Auditoría de formulario", 10); } catch (e) {}
+  return r.sinPuntaje;
+}
+
+// Recorre el formulario y devuelve { titulo, filas, sinPuntaje } sin tocar la hoja.
+function filasAuditoriaFormulario(formId) {
   const form = FormApp.openById(formId);
   const filas = [];
   let seccion = "";
@@ -1100,16 +1115,17 @@ function auditarOpcionesFormulario(formId) {
     });
   });
 
+  return { titulo: form.getTitle(), filas, sinPuntaje };
+}
+
+// Vuelca en la hoja de auditoría las filas de uno o varios formularios, de una sola vez.
+function escribirAuditoria(filas) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const hoja = ss.getSheetByName(CONFIG.HOJAS.AUDITORIA) || ss.insertSheet(CONFIG.HOJAS.AUDITORIA);
   hoja.clear();
   hoja.getRange(1, 1, 1, 7).setValues([["FORMULARIO", "PREGUNTA", "SECCIÓN", "OPCIÓN", "RESULTADO", "PUNTAJE", "DETALLE"]]).setFontWeight("bold");
   if (filas.length) hoja.getRange(2, 1, filas.length, 7).setValues(filas);
-
-  const resumen = `${form.getTitle()}: ${filas.length} opciones revisadas, ${sinPuntaje} sin puntaje. Ver hoja ${CONFIG.HOJAS.AUDITORIA}.`;
-  Logger.log(resumen);
-  try { ss.toast(resumen, "Auditoría de formulario", 10); } catch (e) {}
-  return sinPuntaje;
+  return hoja;
 }
 
 // Recalcula plazo y fórmula de tiempo restante de toda la bandeja con el motor actual.

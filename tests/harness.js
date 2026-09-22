@@ -14,7 +14,7 @@ const vm = require("vm");
 
 const RAIZ = path.resolve(__dirname, "..");
 // Mismo orden que `filePushOrder` de .clasp.json: Código define CONFIG, del que dependen los demás.
-const ARCHIVOS = ["Código.gs", "Calendario.gs", "Reloj.gs", "Ventana.gs", "Servicios.gs", "Tiempos.gs"];
+const ARCHIVOS = ["Código.gs", "Calendario.gs", "Reloj.gs", "Ventana.gs", "Servicios.gs", "Tiempos.gs", "Verificacion.gs"];
 
 // --- Simulación mínima de una hoja de cálculo ------------------------------
 // Solo lo que usan las funciones bajo prueba. Una hoja es una matriz de valores.
@@ -48,6 +48,7 @@ function hojaSimulada(nombre, valores) {
     nombre,
     datos,
     getName: () => nombre,
+    getSheetId: () => nombre,   // el caché de columnas solo lo usa como clave
     getLastRow: () => datos.length,
     getLastColumn: () => datos.reduce((m, f) => Math.max(m, f.length), 0),
     getMaxRows: () => datos.length,
@@ -101,6 +102,10 @@ function contextoGoogle(opciones) {
       getActiveSpreadsheet: () => ({
         getSheetByName: n => hojas[n] || null,
         insertSheet: n => (hojas[n] = hojaSimulada(n, [])),
+        // El simulador no evalúa fórmulas: probarFormulaHorasHabiles() solo puede correr
+        // dentro de Sheets. deleteSheet existe para que falle por esa razón y no por un
+        // hueco del arnés.
+        deleteSheet: h => { delete hojas[h && h.getName ? h.getName() : h]; },
         getSheets: () => Object.keys(hojas).map(n => hojas[n]),
         getId: () => "hoja-simulada",
         getName: () => "Simulada"

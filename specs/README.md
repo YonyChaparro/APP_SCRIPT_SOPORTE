@@ -24,7 +24,7 @@ Carpeta de especificaciones del proyecto **Solicitudes Soporte Técnico**. Cada 
 | [01 · Reloj hábil](01-reloj-habil/requirements.md) | «2. Cortar el tiempo cuando sean fines de semana y festivos» | **Implementada** (17-sep-2026) · 39 casos en verde · pendiente migración de la bandeja (T-01-09) | 00 |
 | [02 · Ventana del formulario](02-ventana-formulario/requirements.md) | «3. Bloquear el formulario después de los viernes 3:30 pm y activarlo el primer día hábil a las 8 am» | **Implementada** (17-sep-2026) · 38 casos en verde · pendiente puesta en marcha (T-02-13) | 00 |
 
-**Archivos:** `Calendario.gs` (00), `Reloj.gs` (01), `Ventana.gs` (02); `Código.gs` conserva configuración, disparadores, menú y motor de puntajes; `Servicios.gs` contiene el catálogo del Excel y su prueba exhaustiva y `Tiempos.gs` la de plazos de respuesta (ver abajo).
+**Archivos:** `Calendario.gs` (00), `Reloj.gs` (01), `Ventana.gs` (02); `Código.gs` conserva configuración, disparadores, menú y motor de puntajes; `Servicios.gs` contiene el catálogo del Excel y su prueba exhaustiva, `Tiempos.gs` la de plazos de respuesta y `Verificacion.gs` el informe de verificación dentro de la hoja (ver abajo).
 
 ### Verificación del catálogo de servicios (22 de septiembre de 2026)
 
@@ -40,11 +40,10 @@ No llevan carpeta de spec propia: no añaden funcionalidad, verifican la que ya 
 
 **Verificación pendiente en la hoja de pruebas** (solo puede hacerse dentro de Sheets):
 
-1. *Soporte → Generar festivos del año…* para 2026 y 2027.
-2. *Soporte → Pruebas → Probar todo* (debe decir «Todas las pruebas en verde»; 44.372 casos, incluidos los 5.530 del catálogo y los 38.667 de tiempos de respuesta) y *Fórmula de horas hábiles ↔ script*.
-3. *Soporte → Recalcular plazos de pendientes* (migra la bandeja: crea `INICIO RELOJ` y `FECHA LÍMITE`).
-4. *Soporte → Configurar triggers* (instala el programador y la reconciliación; reconcilia el formulario de pruebas de inmediato) y luego *Formulario → Estado de la ventana*.
-5. Observar `Bitácora_Ventana` durante un ciclo viernes → lunes.
+1. *Soporte → **Verificación completa…*** y responder **SÍ** a las correcciones. Una sola acción que genera los festivos de 2026 y 2027, ejecuta las seis suites (44.372 casos) y la comprobación de la fórmula, migra la bandeja creando `INICIO RELOJ` y `FECHA LÍMITE`, y audita las opciones de los dos formularios. Deja el detalle en la pestaña `Informe_Verificación`; el resumen debe quedar sin errores.
+2. *Soporte → Configurar triggers* (instala el programador y la reconciliación; reconcilia el formulario de pruebas de inmediato). La verificación **no** lo hace por su cuenta porque borra todos los disparadores existentes y manda correo.
+3. Repetir *Verificación completa…* (basta con **NO**) y comprobar que los pasos «Disparadores» y «Ventana del formulario» quedan en verde.
+4. Observar `Bitácora_Ventana` durante un ciclo viernes → lunes.
 
 Orden de implementación propuesto: **00 → 01 → 02**. 01 y 02 son independientes entre sí; solo comparten 00.
 

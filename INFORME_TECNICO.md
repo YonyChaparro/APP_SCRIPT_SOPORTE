@@ -461,3 +461,46 @@ Ninguna es un defecto del código; las tres salen del propio Excel y corresponde
 2. **«NO ESTABLECIDO» y «DURANTE EL SEMESTRE ACADÉMICO» duran lo mismo.** Ambas se traducen a 2.160 horas hábiles (90 días hábiles) en `ESCALA_TIEMPOS`. Son etiquetas distintas con el mismo vencimiento real, de modo que la alerta de vencidas las trata igual. Es una decisión heredada, no un error, pero conviene que sea explícita: «NO ESTABLECIDO» significa hoy «90 días hábiles».
 3. **El tramo «24 HORAS» es casi inalcanzable.** Solo lo alcanzan los servicios de 5 puntos en ubicaciones de 1 o 5 puntos (Decanatura, Vicedecanatura, Sala de Juntas, Sala de Videoconferencias, Secretaría de Facultad, Unidad Administrativa) y con 1 a 3 equipos. Ninguna solicitud de sala de informática, biblioteca o salones puede recibir nunca el plazo más urgente.
 
+---
+
+## 15. Informe de verificación dentro de la hoja (22 de septiembre de 2026)
+
+### 15.1 Por qué
+
+Las 44.372 comprobaciones de las suites no tocan Google: son JavaScript puro. Todo lo que solo existe dentro de Sheets —la pestaña `Festivos`, las columnas reales, la bandeja, los disparadores, el formulario— quedaba fuera, listado en `specs/README.md` como una secuencia de cinco pasos manuales que había que ejecutar en orden y cuyo resultado se leía en cinco diálogos distintos.
+
+`Verificacion.gs` los agrupa en una sola entrada de menú y deja el resultado en una pestaña (`Informe_Verificación`), que puede copiarse entera.
+
+### 15.2 Los doce pasos
+
+| Paso | Grupo | Qué comprueba |
+|---|---|---|
+| 1. Entorno | Diagnóstico | Hoja, zona horaria, cuenta que ejecuta, formulario que gobierna la ventana (avisa si no es el de pruebas) |
+| 2. Hojas del libro | Diagnóstico | Las seis hojas de `CONFIG.HOJAS`, con su número de filas; error si faltan las dos imprescindibles |
+| 3. Columnas detectadas | Diagnóstico | Qué columna reconoce el script para cada campo, en el histórico y en la bandeja, y qué encabezados ha tenido que crear |
+| 4. Pestaña Festivos | Diagnóstico | Filas, fechas inválidas, años con festivos nacionales y cuáles faltan |
+| 5. Generar festivos | **Corrección** | Genera los años que falten |
+| 6. Pruebas automáticas | Diagnóstico | Las seis suites, con su recuento |
+| 6b. Fórmula ↔ script | Diagnóstico | La comprobación que necesita Sheets de verdad, separada del resto |
+| 7. Bandeja de pendientes | Diagnóstico | Solicitudes sin fecha límite, con fecha de solicitud inválida, vencidas y próximas a vencer |
+| 8. Recalcular plazos | **Corrección** | `recalcularPendientes()`, con el listado de lo que cambió |
+| 9. Bandeja tras el recálculo | Diagnóstico | Repite el paso 7 para ver el efecto (solo si hubo corrección) |
+| 10. Disparadores | Diagnóstico | Los seis permanentes esperados, los que faltan, los que sobran y los puntuales de la ventana |
+| 11. Ventana del formulario | Diagnóstico | Estado real contra el que dicta la regla, modo, próxima apertura y cierre |
+| 12. Opciones de los formularios | Diagnóstico | Audita **los dos** formularios contra el catálogo y vuelca ambos en `Auditoría_Formulario` |
+
+### 15.3 Qué no hace por su cuenta
+
+No instala disparadores: `configurarTriggers()` borra **todos** los existentes y manda correo, así que se reporta y se deja al menú. Tampoco abre ni cierra el formulario. El informe nombra explícitamente lo que falta y con qué opción del menú se arregla.
+
+El diagnóstico es de solo lectura con una excepción heredada: `detectarColumnas()` etiqueta las columnas propias del script (`RADICADO`, `ESTADO`, `FECHA LÍMITE`…) cuando faltan. Nunca sobrescribe una celda con contenido, y el paso 3 informa celda por celda cuáles creó, para que no aparezcan columnas nuevas sin explicación.
+
+### 15.4 Cambios de apoyo en `Código.gs`
+
+- `mostrarResultado` acepta una captura (`_capturaResultados`): cuando está activa, el texto va a un array en vez de a un diálogo. Es lo que permite ejecutar las seis suites de corrido y recoger su salida sin abrir seis ventanas.
+- `auditarOpcionesFormulario` se partió en `filasAuditoriaFormulario(formId)` (recorre y devuelve filas, no toca la hoja) y `escribirAuditoria(filas)` (vuelca). Antes, auditar los dos formularios seguidos dejaba en la hoja solo el segundo; ahora el paso 12 los escribe juntos.
+
+### 15.5 `tests/verificacion.js`
+
+Fuera de Sheets no hay nada que diagnosticar, así que la prueba no comprueba que el diagnóstico acierte, sino lo contrario: que **un entorno roto no tumbe la herramienta con la que se diagnostica un entorno roto**. Ejecuta el informe contra un libro vacío y contra uno mínimo, y exige que devuelva los doce pasos, que ninguno propague una excepción, que ninguno quede sin detalle, que las seis suites puras sigan en verde sin una sola hoja y que los pasos de corrección no se ejecuten sin autorización. **86 comprobaciones.**
+

@@ -17,7 +17,8 @@ const SUITES = [
   ["Calendario hábil", "probarCalendario"],
   ["Reloj hábil", "probarRelojHabil"],
   ["Ventana del formulario", "probarVentana"],
-  ["Excel ↔ código (TIEMPOS DE RESPUESTA.xlsx)", require("./excel").probarExcel]
+  ["Excel ↔ código (TIEMPOS DE RESPUESTA.xlsx)", require("./excel").probarExcel],
+  ["Informe de verificación", require("./verificacion").probarVerificacion]
 ];
 
 const filtro = (process.argv[2] || "").toLowerCase();

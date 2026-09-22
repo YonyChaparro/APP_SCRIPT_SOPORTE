@@ -6,10 +6,11 @@ servicios que el código usa (`SpreadsheetApp`, `MailApp`, `PropertiesService`, 
 `ScriptApp`, `Utilities`, `LockService`, `Logger`).
 
 ```bash
-npm test                 # las siete suites
+npm test                 # las ocho suites
 npm run test:servicios   # solo el catálogo de servicios
 npm run test:tiempos     # solo los plazos de respuesta
 npm run test:excel       # solo la comparación con el .xlsx del disco
+npm run test:verificacion # solo el informe de verificación de la hoja
 npm run mutacion         # comprueba que las suites detectan averías
 npm run matriz           # regenera TIEMPOS_POR_SERVICIO.md
 VERBOSE=1 npm test       # además vuelca el Logger
@@ -17,11 +18,12 @@ VERBOSE=1 npm test       # además vuelca el Logger
 
 | Archivo | Qué hace |
 |---|---|
-| `harness.js` | Carga los seis `.gs` en un único contexto `vm` (igual que Apps Script, donde todos comparten ámbito global) con los servicios de Google simulados |
+| `harness.js` | Carga los siete `.gs` en un único contexto `vm` (igual que Apps Script, donde todos comparten ámbito global) con los servicios de Google simulados |
 | `run.js` | Ejecuta las suites y resume; sale con código ≠ 0 si alguna falla |
 | `xlsx.js` | Lector mínimo de `.xlsx` sin dependencias: un libro de Excel es un ZIP con XML dentro, y `zlib` basta para abrirlo |
 | `excel.js` | Compara el `.xlsx` real del disco con el catálogo transcrito en el código |
 | `matriz.js` | Genera `TIEMPOS_POR_SERVICIO.md` a partir del motor y del `.xlsx` |
+| `verificacion.js` | Prueba de humo del informe de `Verificacion.gs`: que no lo tumbe un libro vacío |
 | `mutacion.js` | Introduce 17 averías de una en una, verifica que la suite correspondiente las detecta y restaura los archivos |
 
 ## Por qué existe el arnés
@@ -46,6 +48,7 @@ apertura y cierre del formulario y los disparadores. Esas verificaciones están 
 | Reloj hábil | `probarRelojHabil` | 39 | `Reloj.gs` | sí |
 | Ventana del formulario | `probarVentana` | 38 | `Ventana.gs` | sí |
 | Excel ↔ código | `probarExcel` | 4.700 | `tests/excel.js` | no (lee un archivo) |
+| Informe de verificación | `probarVerificacion` | 86 | `tests/verificacion.js` | no (prueba de humo) |
 
 ## Las tres fuentes de verdad
 
@@ -67,6 +70,22 @@ las dos copias del código vuelven a coincidir y nadie nota que el Excel dice ot
 test:excel` vuelve a verde, las otras dos suites pasan a rojo), luego `PUNTAJES` y
 `ESCALA_*` en `Código.gs` (todo verde), y por último `npm run matriz`.
 
+## Lo que solo puede probarse dentro de Sheets
+
+`Verificacion.gs` agrupa en una sola entrada de menú (*Soporte → Verificación completa…*)
+las comprobaciones que necesitan a Google de verdad: pestaña `Festivos`, columnas reales,
+bandeja de pendientes, disparadores, estado de la ventana y opciones de los dos
+formularios. Escribe el resultado en la pestaña `Informe_Verificación`.
+
+Separa **diagnóstico** (siempre) de **corrección** (solo si se confirma: generar festivos y
+recalcular la bandeja). No instala disparadores ni abre o cierra el formulario: eso sigue
+requiriendo una acción explícita del menú.
+
+`tests/verificacion.js` no puede comprobar que el diagnóstico acierte —fuera de Sheets no
+hay nada que diagnosticar—, así que comprueba lo otro: que **un entorno roto no lo tumbe**.
+Lo ejecuta contra un libro vacío y contra uno mínimo, y exige que devuelva todos los pasos,
+que ninguno quede sin explicación y que los pasos de corrección no se ejecuten sin permiso.
+
 ## Qué cubre cada capa
 
 - `probarServicios()` — el **puntaje**: cada ubicación y cada servicio, en todas sus
@@ -75,3 +94,5 @@ test:excel` vuelve a verde, las otras dos suites pasan a rojo), luego `PUNTAJES`
   horas correctas y en una fecha límite hábil correcta, para cada servicio y cada variante.
 - `tests/excel.js` — que las dos anteriores sigan hablando del mismo Excel que hay en el
   disco.
+- `Verificacion.gs` — que la hoja real (festivos, columnas, bandeja, disparadores, ventana
+  y formularios) esté en el estado que el código supone.
