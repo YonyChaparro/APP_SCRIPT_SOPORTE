@@ -130,6 +130,28 @@ Qué significa en la práctica:
 
 Dos puntos que siguen esperando decisión de la Unidad, porque son de criterio y no de programación: las dos opciones del grupo «Usuario» del formulario (crear usuario de Windows, falla de inicio de sesión) **no existen en el Excel** y hoy usan un puntaje provisional; y el Excel trae «Oficina Area C. de Contabililidad y F.» con un error de dedo que conviene corregir en el original.
 
+## Se probó también el tiempo de respuesta de cada servicio (22 de septiembre de 2026)
+
+La prueba anterior verificaba los **puntos** de cada oficina y cada servicio. Faltaba el paso siguiente, que es el que el solicitante realmente ve: **cuánto tiempo se le promete**. Ahora está cubierto de punta a punta.
+
+**Se probó cada servicio posible con todas sus variantes.** Los 31 servicios, contra las 38 ubicaciones y los 4 tramos de cantidad de equipos, y cada uno escrito de todas las formas en que puede llegar (como está en el Excel, como lo escribe el formulario, con o sin tildes, con el nombre de la categoría largo o corto). Son **38.667 comprobaciones**, y verifican tres cosas que antes nadie miraba:
+
+- Que el plazo que sale («24 horas», «5 días», «15 días»…) sea el que dice el Excel.
+- Que ese plazo se traduzca en la **cantidad correcta de horas**, y que la **fecha límite** que se le promete al solicitante caiga siempre en día hábil, saltando fines de semana y festivos. Se probó desde un lunes, desde un viernes por la tarde, desde un sábado, desde la víspera de un festivo y desde el festivo mismo.
+- Que la escala tenga sentido: pedir para más equipos, o desde una oficina de mayor prioridad, **nunca** puede dar un plazo más corto.
+
+**Ahora el programa se compara con el Excel de verdad.** Hasta ahora la prueba comparaba dos copias de las tablas que estaban las dos dentro del programa. Si alguien cambiaba un puntaje en un lado y, para que la prueba dejara de fallar, lo cambiaba igual en el otro, todo quedaba en verde aunque el archivo *TIEMPOS DE RESPUESTA.xlsx* dijera otra cosa. Se agregó una prueba que **abre el archivo Excel** y lo compara casilla por casilla con el programa, incluidas las dos hojas ocultas que alimentan las listas del formulario. Se comprobó que esa prueba funciona provocando a propósito cuatro desajustes de ese tipo: las cuatro veces, la prueba nueva fue la única que los detectó.
+
+**Hay un documento nuevo con la tabla completa.** `TIEMPOS_POR_SERVICIO.md` muestra, para cada uno de los 31 servicios, qué plazo le corresponde según la oficina y la cantidad de equipos. Se genera solo a partir del programa y del Excel, así que no puede quedar desactualizado.
+
+### Tres cosas que la tabla dejó a la vista
+
+Ninguna es un error de programación: son consecuencias de cómo están puestos los puntajes en el Excel, y la decisión de cambiarlas o no es de la Unidad.
+
+1. **«Compras» y «Directrices Técnicas» siempre salen como «NO ESTABLECIDO».** Valen 70 puntos, y con eso ya se pasan del último tramo sin importar la oficina ni la cantidad de equipos. Es decir: hoy esos dos servicios no tienen nunca un plazo concreto. Si la intención era que al menos en las oficinas de menor prioridad cayeran en «durante el semestre académico», hay que ajustar el puntaje.
+2. **«NO ESTABLECIDO» y «durante el semestre académico» vencen el mismo día.** Las dos etiquetas se traducen internamente a 90 días hábiles. Son nombres distintos para el mismo plazo real, y la alerta de vencidas las trata igual. Conviene saberlo: hoy «no establecido» significa, en la práctica, 90 días hábiles.
+3. **El plazo de «24 horas» casi no se puede alcanzar.** Solo lo obtienen los servicios más livianos (5 puntos) pedidos desde Decanatura, Vicedecanatura, Sala de Juntas, Sala de Videoconferencias, Secretaría de Facultad o Unidad Administrativa, y para 3 equipos o menos. Una falla en una sala de informática, en la biblioteca o en un salón nunca puede recibir el plazo más urgente.
+
 ## Qué se recomienda hacer
 
 **Primero, proteger lo que hay** *(rápido, sin riesgo)*

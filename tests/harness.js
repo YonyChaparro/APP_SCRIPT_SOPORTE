@@ -1,7 +1,7 @@
 /*
   Arnés Node para las suites `probar*()` de Apps Script.
 
-  Carga los cuatro .gs en un único contexto `vm` (igual que hace Apps Script, donde todos
+  Carga los .gs en un único contexto `vm` (igual que hace Apps Script, donde todos
   los archivos comparten ámbito global) con los servicios de Google simulados. Permite
   ejecutar las pruebas fuera de Sheets, en CI o desde la terminal.
 
@@ -14,7 +14,7 @@ const vm = require("vm");
 
 const RAIZ = path.resolve(__dirname, "..");
 // Mismo orden que `filePushOrder` de .clasp.json: Código define CONFIG, del que dependen los demás.
-const ARCHIVOS = ["Código.gs", "Calendario.gs", "Reloj.gs", "Ventana.gs", "Servicios.gs"];
+const ARCHIVOS = ["Código.gs", "Calendario.gs", "Reloj.gs", "Ventana.gs", "Servicios.gs", "Tiempos.gs"];
 
 // --- Simulación mínima de una hoja de cálculo ------------------------------
 // Solo lo que usan las funciones bajo prueba. Una hoja es una matriz de valores.
@@ -181,4 +181,11 @@ function cargar(opciones) {
   return ctx;
 }
 
-module.exports = { cargar, hojaSimulada, ARCHIVOS };
+// Los `const` del nivel superior de un .gs no quedan como propiedades del contexto (van al
+// ámbito léxico global, visible entre archivos pero no desde fuera). Para leer CAT_TIEMPOS y
+// compañía desde una prueba en Node hay que evaluar el nombre dentro del propio contexto.
+function valor(ctx, expresion) {
+  return vm.runInContext(expresion, ctx);
+}
+
+module.exports = { cargar, hojaSimulada, valor, ARCHIVOS };

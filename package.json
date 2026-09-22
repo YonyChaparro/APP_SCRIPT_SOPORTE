@@ -6,10 +6,13 @@
   "scripts": {
     "test": "node tests/run.js",
     "test:servicios": "node tests/run.js servicios",
+    "test:tiempos": "node tests/run.js tiempos",
     "test:calendario": "node tests/run.js calendario",
     "test:reloj": "node tests/run.js reloj",
     "test:ventana": "node tests/run.js ventana",
-    "mutacion": "node tests/mutacion.js"
+    "test:excel": "node tests/excel.js",
+    "mutacion": "node tests/mutacion.js",
+    "matriz": "node tests/matriz.js"
   },
   "engines": {
     "node": ">=18"

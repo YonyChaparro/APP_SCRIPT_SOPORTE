@@ -345,7 +345,7 @@ Regla generalizada: cierra a las 15:30 de todo día hábil seguido de uno no há
 
 ### 12.6 Pruebas
 
-`Soporte → Pruebas → Probar todo` ejecuta las cinco suites (5.705 casos) sin tocar formulario ni disparadores reales. `Fórmula de horas hábiles ↔ script` compara la fórmula de la hoja con el cálculo del script en una hoja temporal. Las mismas suites corren en Node con un arnés que simula los servicios de Google (`tests/`, `npm test`).
+`Soporte → Pruebas → Probar todo` ejecuta las seis suites (44.372 casos) sin tocar formulario ni disparadores reales. `Fórmula de horas hábiles ↔ script` compara la fórmula de la hoja con el cálculo del script en una hoja temporal. Las mismas suites corren en Node con un arnés que simula los servicios de Google (`tests/`, `npm test`).
 
 ---
 
@@ -375,7 +375,7 @@ Regla generalizada: cierra a las 15:30 de todo día hábil seguido de uno no há
 
 ### 13.3 Prueba de mutación
 
-Una suite que siempre pasa no demuestra nada. `tests/mutacion.js` introduce ocho averías realistas de una en una en `Código.gs` —un puntaje cambiado, una frontera de escala corrida, un alias borrado, un grupo retirado de `GRUPOS_NO_SERVICIO`, `PUNTAJE_SIN_COINCIDENCIA` de vuelta a 0— y verifica que la suite falla en cada caso. **8/8 detectadas.** El script restaura el archivo al terminar, incluso si aborta.
+Una suite que siempre pasa no demuestra nada. `tests/mutacion.js` introduce ocho averías realistas de una en una en `Código.gs` —un puntaje cambiado, una frontera de escala corrida, un alias borrado, un grupo retirado de `GRUPOS_NO_SERVICIO`, `PUNTAJE_SIN_COINCIDENCIA` de vuelta a 0— y verifica que la suite falla en cada caso. **8/8 detectadas.** El script restaura el archivo al terminar, incluso si aborta. *(Ampliado a 17 mutaciones sobre tres suites en la §14.4.)*
 
 La octava mutación expuso un defecto de la propia suite: la aserción del puntaje neutro se comparaba contra `PUNTAJE_SIN_COINCIDENCIA`, de modo que cambiar la constante no la hacía fallar. Se reemplazó por el contrato de **H-01**: la constante debe ser estrictamente positiva y una solicitud enteramente irreconocible no puede caer en el tramo más urgente.
 
@@ -394,4 +394,70 @@ Ninguno es un defecto del código: son decisiones que corresponden al responsabl
 3. **Nombres ambiguos entre edificios.** «OFICINAS DOCENTES» existe en 311 (20 puntos) y en 238 (10). Solo el edificio los distingue: si esa columna llega vacía, la solicitud queda sin resolver y marcada para revisión. Es el comportamiento correcto, pero conviene que el formulario haga obligatorio el edificio.
 4. **Homónimos entre categorías.** «Mantenimiento Preventivo» (30 en impresoras, 10 en video) y «Otro» (20 en impresoras vía alias `Otros`, 10 en software y en video). Se resuelven bien mientras la categoría llegue; sin ella quedan sin resolver, como debe ser.
 
+
+---
+
+## 14. Tiempos de respuesta por servicio y verificación contra el `.xlsx` (22 de septiembre de 2026)
+
+### 14.1 Los dos huecos que quedaban
+
+La §13 dejó el catálogo comparado contra un oráculo independiente, pero con dos límites:
+
+1. **El oráculo también era código.** `CAT_*` es una segunda transcripción del Excel escrita a mano. Si alguien cambia un puntaje en `PUNTAJES` y, para «arreglar la prueba», lo cambia igual en `CAT_*`, las dos fuentes vuelven a coincidir entre ellas y la suite se pone verde mientras el `.xlsx` ya dice otra cosa. Nada leía el archivo real.
+2. **La prueba se detenía en la etiqueta.** `probarServicios()` verifica el puntaje y el nombre del plazo («72 HORAS»), pero no las **horas** asociadas ni la **fecha límite** que se le promete al solicitante en el correo. La pestaña se llama «TIEMPOS DE RESPUESTA» y ese tramo final no estaba cubierto.
+
+### 14.2 `Tiempos.gs` — `probarTiempos()` (38.667 casos)
+
+Recorre el camino completo *puntaje → plazo → horas hábiles → fecha límite*, para cada servicio del árbol en todas sus grafías.
+
+| Bloque | Qué verifica |
+|---|---|
+| TR1 | Matriz 38 ubicaciones × 31 servicios × 4 tramos con los nombres **canónicos** (`probarServicios` la recorre con los del Excel), comprobando además el campo `horas`, que es el que alimenta la fecha límite |
+| TR2 | **Monotonía.** Subir de tramo de cantidad, o pasar a una ubicación de más puntos, nunca puede acortar el plazo. Una escala invertida deja la suma cuadrando y solo se ve aquí |
+| TR3 | Las fronteras de cantidad caen exactamente donde dice el Excel: dentro de «1 A 3», «4 A 14», «15 A 30» y «MAS DE 30» el plazo no se mueve, y un equipo más que el tope sí cambia de tramo |
+| TR4 | Cada servicio × cada una de sus grafías × cada grafía de su categoría da el mismo plazo, las mismas horas y el mismo nombre canónico, sin avisos |
+| TR5 | Cada ubicación × cada grafía × cada forma de escribir el edificio, contra servicios de cada puntaje distinto |
+| TR6 | Etiqueta → horas, incluidas las grafías antiguas de la hoja («5 DÍAS» con tilde, minúsculas, con espacios). Una etiqueta irreconocible cae en el plazo más largo, nunca en el más urgente |
+| TR7 | **Fecha límite.** Los 8 plazos del Excel desde 8 instantes distintos (lunes, viernes por la tarde, sábado, medianoche, víspera de festivo, festivo) |
+| TR8 | Cantidad ausente, cero, negativa o no numérica: plazo del tramo mínimo, nunca vacío ni 0 horas, para los 31 servicios |
+| TR9 | **Alcance.** Puntaje mínimo y máximo alcanzable por cada servicio y los plazos que produce, contra los extremos que predice el catálogo |
+
+TR7 no compara contra otra implementación de la aritmética hábil —sería copiar el algoritmo y probarlo contra sí mismo— sino contra su **contrato**: la fecha límite es el primer instante con exactamente `horas` horas hábiles desde el inicio, así que `horasHabilesEntre(inicio, límite)` debe dar justo esas horas y un minuto antes debe faltar tiempo. Cualquier implementación correcta lo cumple; ninguna incorrecta lo hace.
+
+### 14.3 `tests/excel.js` — el `.xlsx` como fuente de verdad (4.700 comprobaciones)
+
+Abre `TIEMPOS DE RESPUESTA.xlsx` del disco y reconstruye sus seis pestañas, incluidas las dos ocultas (`tabla_ub` y `tabla_serv`, que alimentan los desplegables del formulario). `tests/xlsx.js` implementa el lector: un `.xlsx` es un ZIP con XML dentro, y se abre con `zlib` sin ninguna dependencia externa —el proyecto sigue sin `node_modules`.
+
+| Bloque | Qué verifica |
+|---|---|
+| E0 | Las seis pestañas existen y conservan sus encabezados |
+| E1 | `LISTA DE UBICACIONES` ↔ `CAT_UBICACIONES`: 38 filas, en los dos sentidos, con su edificio y su puntaje |
+| E2 | `ÁRBOL DE SERVICIOS` ↔ `CAT_SERVICIOS`: 29 hojas con su categoría literal, su grupo y su puntaje (las 2 extensiones del formulario quedan excluidas por diseño) |
+| E3 | `CANTIDAD DE EQUIPOS` ↔ `CAT_CANTIDAD`, incluidos los límites de cada tramo |
+| E4 | `TIEMPOS DE RESPUESTA` ↔ `CAT_TIEMPOS`, y que los 8 tramos se encadenen desde 1 sin huecos ni solapes |
+| E5 | `tabla_ub` ↔ `VARIANTES_EDIFICIO`: los tres rangos con nombre listan exactamente las ubicaciones de su edificio |
+| E6 | `tabla_serv`: cada columna corresponde a una categoría declarada y cada valor es o un servicio de esa categoría o un selector de grupo reconocido |
+| E7 | Matriz de **4.408 combinaciones leídas del archivo**: cada ubicación × cada hoja del árbol × cada tramo, con los textos tal cual están en las celdas. El puntaje y el plazo esperados salen del propio Excel |
+
+E2 compara la categoría **literal**, sin recortar: el Excel trae un espacio inicial en `" VIDEO - PROYECTORES O PANTALLAS (…)"` y esa rareza tiene que seguir declarada, porque es lo que el formulario envía.
+
+Esta suite solo corre en Node (`npm run test:excel`; dentro de Sheets no hay acceso al archivo). Queda incluida en `npm test`.
+
+### 14.4 Prueba de mutación ampliada: 17/17
+
+`tests/mutacion.js` pasa de 8 a 17 averías y ahora puede tocar varios archivos a la vez y dirigir cada una a la suite que debería cazarla. Las cinco nuevas de `probarTiempos` incluyen las horas de un plazo cambiadas dejando la etiqueta intacta, la escala invertida, y dos averías en `sumarHorasHabiles` (fecha límite corrida una hora; deja de saltar los días no hábiles).
+
+Las cuatro últimas son las que justifican la §14.3. Cambian **a la vez** el motor y su oráculo en el código —por ejemplo, «Biblioteca» a 25 puntos en `PUNTAJES` y en `CAT_UBICACIONES`— de modo que `probarServicios()` se queda **en verde**. El script lo comprueba explícitamente: si la suite del catálogo también las detectara, la mutación no demostraría nada y se marca con un aviso. Las cuatro las caza únicamente `tests/excel.js`, que es el único punto del proyecto que mira el archivo original.
+
+### 14.5 `TIEMPOS_POR_SERVICIO.md`
+
+Documento generado (`npm run matriz`), no editable a mano: el plazo de los 31 servicios para cualquier ubicación y cualquier cantidad. Como el plazo depende solo del puntaje, las 38 ubicaciones colapsan en los 5 puntajes distintos (1, 5, 10, 20, 30) y la matriz completa de cada servicio cabe en una tabla de 5 × 4 sin perder ningún caso. Incluye las escalas leídas del `.xlsx` y un resumen del alcance de cada servicio.
+
+### 14.6 Observaciones que deja la matriz
+
+Ninguna es un defecto del código; las tres salen del propio Excel y corresponden al responsable del proceso.
+
+1. **«Compras» y «Directrices Técnicas» solo pueden ser «NO ESTABLECIDO».** Con 70 puntos de servicio, el mínimo posible es 70 + 1 (ubicación de menos peso) + 1 (1 a 3 equipos) = 72, por encima del último tramo. Ni la ubicación ni la cantidad cambian nada. Si la intención era que un concepto técnico para compras en Decanatura se atendiera «durante el semestre» y no «sin plazo establecido», hay que bajar el puntaje del servicio o subir el techo del tramo 61–70.
+2. **«NO ESTABLECIDO» y «DURANTE EL SEMESTRE ACADÉMICO» duran lo mismo.** Ambas se traducen a 2.160 horas hábiles (90 días hábiles) en `ESCALA_TIEMPOS`. Son etiquetas distintas con el mismo vencimiento real, de modo que la alerta de vencidas las trata igual. Es una decisión heredada, no un error, pero conviene que sea explícita: «NO ESTABLECIDO» significa hoy «90 días hábiles».
+3. **El tramo «24 HORAS» es casi inalcanzable.** Solo lo alcanzan los servicios de 5 puntos en ubicaciones de 1 o 5 puntos (Decanatura, Vicedecanatura, Sala de Juntas, Sala de Videoconferencias, Secretaría de Facultad, Unidad Administrativa) y con 1 a 3 equipos. Ninguna solicitud de sala de informática, biblioteca o salones puede recibir nunca el plazo más urgente.
 

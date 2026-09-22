@@ -24,18 +24,24 @@ Carpeta de especificaciones del proyecto **Solicitudes Soporte Técnico**. Cada 
 | [01 · Reloj hábil](01-reloj-habil/requirements.md) | «2. Cortar el tiempo cuando sean fines de semana y festivos» | **Implementada** (17-sep-2026) · 39 casos en verde · pendiente migración de la bandeja (T-01-09) | 00 |
 | [02 · Ventana del formulario](02-ventana-formulario/requirements.md) | «3. Bloquear el formulario después de los viernes 3:30 pm y activarlo el primer día hábil a las 8 am» | **Implementada** (17-sep-2026) · 38 casos en verde · pendiente puesta en marcha (T-02-13) | 00 |
 
-**Archivos:** `Calendario.gs` (00), `Reloj.gs` (01), `Ventana.gs` (02); `Código.gs` conserva configuración, disparadores, menú y motor de puntajes; `Servicios.gs` contiene el catálogo del Excel y su prueba exhaustiva (ver abajo).
+**Archivos:** `Calendario.gs` (00), `Reloj.gs` (01), `Ventana.gs` (02); `Código.gs` conserva configuración, disparadores, menú y motor de puntajes; `Servicios.gs` contiene el catálogo del Excel y su prueba exhaustiva y `Tiempos.gs` la de plazos de respuesta (ver abajo).
 
 ### Verificación del catálogo de servicios (22 de septiembre de 2026)
 
-`Servicios.gs` transcribe las cuatro pestañas de puntaje de `TIEMPOS DE RESPUESTA.xlsx` como **oráculo independiente** de `PUNTAJES` / `ESCALA_CANTIDAD` / `ESCALA_TIEMPOS`, y `probarServicios()` compara ambas fuentes: 38 ubicaciones × 31 servicios × 4 tramos de cantidad, cada uno en todas sus grafías (Excel, formulario, rangos con nombre de `tabla_serv`, con y sin tildes). **5.530 casos en verde**; `tests/mutacion.js` confirma que la suite detecta 8/8 averías introducidas a propósito. Detalle en `INFORME_TECNICO.md` §13.
+`Servicios.gs` transcribe las cuatro pestañas de puntaje de `TIEMPOS DE RESPUESTA.xlsx` como **oráculo independiente** de `PUNTAJES` / `ESCALA_CANTIDAD` / `ESCALA_TIEMPOS`, y `probarServicios()` compara ambas fuentes: 38 ubicaciones × 31 servicios × 4 tramos de cantidad, cada uno en todas sus grafías (Excel, formulario, rangos con nombre de `tabla_serv`, con y sin tildes). **5.530 casos en verde.** Detalle en `INFORME_TECNICO.md` §13.
 
-No lleva carpeta de spec propia: no añade funcionalidad, verifica la que ya estaba especificada en el motor de puntajes. Su única regla de mantenimiento: **cuando cambie el Excel, actualizar primero el catálogo de `Servicios.gs` y después `PUNTAJES`**. Entre los dos pasos la suite queda en rojo, que es justamente lo que se busca.
+`Tiempos.gs` continúa el camino hasta el final: de los puntos al plazo de la pestaña «TIEMPOS DE RESPUESTA», de ahí a las horas hábiles y de ahí a la fecha límite. `probarTiempos()` cubre cada servicio del árbol en todas sus grafías contra todas las ubicaciones y todos los tramos de cantidad, más la monotonía de la escala, las fronteras de cantidad y la fecha límite desde ocho instantes distintos (lunes, viernes por la tarde, sábado, medianoche, víspera de festivo, festivo). **38.667 casos en verde.**
+
+`tests/excel.js` compara ese catálogo con el **archivo `.xlsx` real del disco**, incluidas las dos pestañas ocultas de desplegables, y recorre las 4.408 combinaciones leídas del archivo. Es la única pieza que mira el original: sin ella, cambiar un puntaje en el motor y «arreglar» la prueba cambiándolo igual en el oráculo deja todo en verde mientras el Excel dice otra cosa. Solo corre en Node. **4.700 comprobaciones en verde.**
+
+`tests/mutacion.js` confirma que las capas de prueba detectan **17/17** averías introducidas a propósito; cuatro de ellas son deriva respecto del Excel y solo las ve `tests/excel.js`. `TIEMPOS_POR_SERVICIO.md` (generado con `npm run matriz`) publica el plazo de los 31 servicios para cualquier ubicación y cantidad. Detalle en `INFORME_TECNICO.md` §14.
+
+No llevan carpeta de spec propia: no añaden funcionalidad, verifican la que ya estaba especificada en el motor de puntajes. Su única regla de mantenimiento: **cuando cambie el Excel, actualizar primero el catálogo de `Servicios.gs`, después `PUNTAJES` en `Código.gs` y por último regenerar la matriz**. Entre los pasos las suites quedan en rojo, que es justamente lo que se busca.
 
 **Verificación pendiente en la hoja de pruebas** (solo puede hacerse dentro de Sheets):
 
 1. *Soporte → Generar festivos del año…* para 2026 y 2027.
-2. *Soporte → Pruebas → Probar todo* (debe decir «Todas las pruebas en verde»; incluye los 5.530 casos del catálogo de servicios) y *Fórmula de horas hábiles ↔ script*.
+2. *Soporte → Pruebas → Probar todo* (debe decir «Todas las pruebas en verde»; 44.372 casos, incluidos los 5.530 del catálogo y los 38.667 de tiempos de respuesta) y *Fórmula de horas hábiles ↔ script*.
 3. *Soporte → Recalcular plazos de pendientes* (migra la bandeja: crea `INICIO RELOJ` y `FECHA LÍMITE`).
 4. *Soporte → Configurar triggers* (instala el programador y la reconciliación; reconcilia el formulario de pruebas de inmediato) y luego *Formulario → Estado de la ventana*.
 5. Observar `Bitácora_Ventana` durante un ciclo viernes → lunes.

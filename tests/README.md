@@ -1,27 +1,33 @@
 # Arnés de pruebas en Node
 
-Las suites viven en los `.gs` (se ejecutan desde *Soporte → Pruebas* dentro de Sheets).
-Este arnés las corre además fuera de Google, en la terminal, simulando los servicios que
-el código usa (`SpreadsheetApp`, `MailApp`, `PropertiesService`, `FormApp`, `ScriptApp`,
-`Utilities`, `LockService`, `Logger`).
+Casi todas las suites viven en los `.gs` (se ejecutan desde *Soporte → Pruebas* dentro de
+Sheets). Este arnés las corre además fuera de Google, en la terminal, simulando los
+servicios que el código usa (`SpreadsheetApp`, `MailApp`, `PropertiesService`, `FormApp`,
+`ScriptApp`, `Utilities`, `LockService`, `Logger`).
 
 ```bash
-npm test                 # las cinco suites
+npm test                 # las siete suites
 npm run test:servicios   # solo el catálogo de servicios
-npm run mutacion         # comprueba que la suite de servicios detecta averías
+npm run test:tiempos     # solo los plazos de respuesta
+npm run test:excel       # solo la comparación con el .xlsx del disco
+npm run mutacion         # comprueba que las suites detectan averías
+npm run matriz           # regenera TIEMPOS_POR_SERVICIO.md
 VERBOSE=1 npm test       # además vuelca el Logger
 ```
 
 | Archivo | Qué hace |
 |---|---|
-| `harness.js` | Carga los cinco `.gs` en un único contexto `vm` (igual que Apps Script, donde todos comparten ámbito global) con los servicios de Google simulados |
+| `harness.js` | Carga los seis `.gs` en un único contexto `vm` (igual que Apps Script, donde todos comparten ámbito global) con los servicios de Google simulados |
 | `run.js` | Ejecuta las suites y resume; sale con código ≠ 0 si alguna falla |
-| `mutacion.js` | Introduce ocho averías de una en una en `Código.gs`, verifica que la suite las detecta y restaura el archivo |
+| `xlsx.js` | Lector mínimo de `.xlsx` sin dependencias: un libro de Excel es un ZIP con XML dentro, y `zlib` basta para abrirlo |
+| `excel.js` | Compara el `.xlsx` real del disco con el catálogo transcrito en el código |
+| `matriz.js` | Genera `TIEMPOS_POR_SERVICIO.md` a partir del motor y del `.xlsx` |
+| `mutacion.js` | Introduce 17 averías de una en una, verifica que la suite correspondiente las detecta y restaura los archivos |
 
 ## Por qué existe el arnés
 
 Las funciones de puntaje son JavaScript puro y no tocan la hoja: se pueden probar sin
-Sheets. Eso permite ejecutar 5.700 casos en menos de un segundo en cada cambio, en vez de
+Sheets. Eso permite ejecutar 44.000 casos en menos de un segundo en cada cambio, en vez de
 abrir el editor de Apps Script y esperar.
 
 Lo que el arnés **no** cubre y solo puede verificarse dentro de Sheets: la lectura real de
@@ -31,22 +37,41 @@ apertura y cierre del formulario y los disparadores. Esas verificaciones están 
 
 ## Suites
 
-| Suite | Función | Casos | Archivo |
-|---|---|---|---|
-| Cálculo de plazos | `probarCalculo` | 53 | `Código.gs` |
-| Catálogo de servicios | `probarServicios` | 5.530 | `Servicios.gs` |
-| Calendario hábil | `probarCalendario` | 45 | `Calendario.gs` |
-| Reloj hábil | `probarRelojHabil` | 39 | `Reloj.gs` |
-| Ventana del formulario | `probarVentana` | 38 | `Ventana.gs` |
+| Suite | Función | Casos | Archivo | Corre en Sheets |
+|---|---|---|---|---|
+| Cálculo de plazos | `probarCalculo` | 53 | `Código.gs` | sí |
+| Catálogo de servicios | `probarServicios` | 5.530 | `Servicios.gs` | sí |
+| Tiempos de respuesta | `probarTiempos` | 38.667 | `Tiempos.gs` | sí |
+| Calendario hábil | `probarCalendario` | 45 | `Calendario.gs` | sí |
+| Reloj hábil | `probarRelojHabil` | 39 | `Reloj.gs` | sí |
+| Ventana del formulario | `probarVentana` | 38 | `Ventana.gs` | sí |
+| Excel ↔ código | `probarExcel` | 4.700 | `tests/excel.js` | no (lee un archivo) |
 
-## El oráculo del catálogo
+## Las tres fuentes de verdad
 
-`Servicios.gs` transcribe a mano las cuatro pestañas de puntaje de
-`TIEMPOS DE RESPUESTA.xlsx` (`CAT_UBICACIONES`, `CAT_SERVICIOS`, `CAT_CANTIDAD`,
-`CAT_TIEMPOS`) y **no** importa nada de `PUNTAJES`. Esa duplicación es deliberada: es lo
-que convierte la suite en una comparación entre dos fuentes independientes. Si alguien
-cambia un puntaje en el código sin cambiarlo en el Excel —o al revés— la suite dice qué
-fila difiere.
+El puntaje de cada ubicación y cada servicio está escrito tres veces, a propósito:
 
-Cuando el Excel cambie, hay que actualizar las dos: primero el catálogo de `Servicios.gs`
-(la suite pasará a fallar), luego `PUNTAJES` en `Código.gs` (vuelve a verde).
+1. **`TIEMPOS DE RESPUESTA.xlsx`** — el original, donde la Unidad tomó las decisiones.
+2. **`PUNTAJES` / `ESCALA_*` en `Código.gs`** — lo que el motor usa en producción.
+3. **`CAT_*` en `Servicios.gs`** — una transcripción del Excel hecha a mano, que sirve de
+   oráculo y **no** importa nada de `PUNTAJES`.
+
+`probarServicios()` y `probarTiempos()` comparan 2 contra 3. `tests/excel.js` compara
+3 contra 1, abriendo el archivo. Hacen falta las dos comparaciones: sin la segunda, quien
+cambia un puntaje en `PUNTAJES` puede «arreglar» la prueba cambiándolo igual en `CAT_*`,
+las dos copias del código vuelven a coincidir y nadie nota que el Excel dice otra cosa.
+`npm run mutacion` incluye cuatro averías de ese tipo exacto y verifica que
+`probarServicios` se queda en verde y solo `tests/excel.js` las caza.
+
+**Cuando el Excel cambie**, el orden es: primero el catálogo de `Servicios.gs` (`npm run
+test:excel` vuelve a verde, las otras dos suites pasan a rojo), luego `PUNTAJES` y
+`ESCALA_*` en `Código.gs` (todo verde), y por último `npm run matriz`.
+
+## Qué cubre cada capa
+
+- `probarServicios()` — el **puntaje**: cada ubicación y cada servicio, en todas sus
+  grafías, valen lo que dice el Excel.
+- `probarTiempos()` — el **plazo**: ese puntaje se traduce en la etiqueta correcta, en las
+  horas correctas y en una fecha límite hábil correcta, para cada servicio y cada variante.
+- `tests/excel.js` — que las dos anteriores sigan hablando del mismo Excel que hay en el
+  disco.

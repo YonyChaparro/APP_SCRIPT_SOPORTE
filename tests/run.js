@@ -8,12 +8,16 @@
 
 const { cargar } = require("./harness");
 
+// Cada suite es [nombre, "nombreDeFunción"] para las que viven en un .gs, o
+// [nombre, función(ctx)] para las que solo pueden correr en Node (leen archivos).
 const SUITES = [
   ["Cálculo de plazos", "probarCalculo"],
   ["Catálogo de servicios", "probarServicios"],
+  ["Tiempos de respuesta", "probarTiempos"],
   ["Calendario hábil", "probarCalendario"],
   ["Reloj hábil", "probarRelojHabil"],
-  ["Ventana del formulario", "probarVentana"]
+  ["Ventana del formulario", "probarVentana"],
+  ["Excel ↔ código (TIEMPOS DE RESPUESTA.xlsx)", require("./excel").probarExcel]
 ];
 
 const filtro = (process.argv[2] || "").toLowerCase();
@@ -35,8 +39,9 @@ let fallos = 0;
 let ejecutadas = 0;
 
 SUITES.forEach(([nombre, fn]) => {
-  if (filtro && !nombre.toLowerCase().includes(filtro) && !fn.toLowerCase().includes(filtro)) return;
-  if (typeof ctx[fn] !== "function") {
+  const etiqueta = typeof fn === "function" ? nombre : fn;
+  if (filtro && !nombre.toLowerCase().includes(filtro) && !etiqueta.toLowerCase().includes(filtro)) return;
+  if (typeof fn !== "function" && typeof ctx[fn] !== "function") {
     console.log(`· ${nombre}: no definida (${fn})`);
     return;
   }
@@ -44,7 +49,13 @@ SUITES.forEach(([nombre, fn]) => {
   salidas.length = 0;
   let ok;
   try {
-    ok = ctx[fn]();
+    if (typeof fn === "function") {
+      const r = fn(ctx);
+      ok = r.ok;
+      salidas.push({ titulo: nombre, texto: r.texto });
+    } else {
+      ok = ctx[fn]();
+    }
   } catch (e) {
     ok = false;
     salidas.push({ titulo: nombre, texto: `EXCEPCIÓN: ${e.message}\n${e.stack}` });

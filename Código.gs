@@ -904,6 +904,7 @@ function onOpen() {
       .addSeparator()
       .addItem("Cálculo de plazos", "probarCalculo")
       .addItem("Catálogo de servicios (Excel)", "probarServicios")
+      .addItem("Tiempos de respuesta por servicio", "probarTiempos")
       .addItem("Calendario hábil", "probarCalendario")
       .addItem("Reloj hábil", "probarRelojHabil")
       .addItem("Ventana del formulario", "probarVentana")
@@ -993,7 +994,7 @@ function probarTodo() {
   _sinAlertas = true;
   const resultados = [];
   try {
-    [["Cálculo de plazos", probarCalculo], ["Catálogo de servicios", probarServicios], ["Calendario hábil", probarCalendario], ["Reloj hábil", probarRelojHabil], ["Ventana del formulario", probarVentana]]
+    [["Cálculo de plazos", probarCalculo], ["Catálogo de servicios", probarServicios], ["Tiempos de respuesta", probarTiempos], ["Calendario hábil", probarCalendario], ["Reloj hábil", probarRelojHabil], ["Ventana del formulario", probarVentana]]
       .forEach(([nombre, fn]) => { let ok; try { ok = fn(); } catch (e) { ok = false; Logger.log(`${nombre}: EXCEPCIÓN ${e.message}`); } resultados.push(`${ok ? "✓" : "✗"} ${nombre}`); });
   } finally { _sinAlertas = false; }
   const todoOk = resultados.every(r => r.startsWith("✓"));
