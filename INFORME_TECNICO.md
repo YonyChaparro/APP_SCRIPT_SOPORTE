@@ -281,3 +281,42 @@ La hoja de pruebas contiene correos institucionales y teléfonos reales (`aruizb
 9. Declarar `oauthScopes` explícitos en el manifiesto.
 10. Eliminar el despliegue sin uso.
 11. Añadir un `onOpen` con menú para `configurarTriggers`, hoy invisible para el usuario final.
+---
+
+## 12. Calendario hábil, reloj hábil y ventana del formulario (17 de septiembre de 2026)
+
+Implementación de los requisitos «2. Cortar el tiempo cuando sean fines de semana y festivos» y «3. Bloquear el formulario fuera del horario de atención», planificados con Spec-Driven Development en [`specs/`](specs/README.md). Decisiones de producto en `specs/README.md`; requisitos, diseño y tareas por feature en sus carpetas.
+
+### 12.1 Archivos
+
+| Archivo | Contenido |
+|---|---|
+| `Calendario.gs` | Festivos nacionales de Colombia (fijos, Ley Emiliani, relativos a la Pascua por Meeus), pestaña `Festivos` editable con generador idempotente por año, `esDiaHabil`, `horasHabilesEntre`, `sumarHorasHabiles`, regla de ventana (`ventanaAbierta`, `proximaApertura`, `proximoCierre`, `transicionesDelDia`), fórmula `LET` equivalente para la hoja, formato de fechas en español, `probarCalendario` (45 casos), `probarFormulaHorasHabiles`. |
+| `Reloj.gs` | `calcularReloj` (inicio efectivo y fecha límite en horas hábiles), `relojDesdeFila`, `clasificarParaAlerta`, escritura en Pendientes por mapa de columnas, `probarRelojHabil` (39 casos). |
+| `Ventana.gs` | Programador diario (6:00) que crea disparadores puntuales exactos de apertura (8:00) y cierre (15:30), reconciliación horaria, modo MANUAL persistido, bitácora `Bitácora_Ventana`, mensaje de cierre con fecha de reapertura, aviso de error una vez al día, menú, `probarVentana` (38 casos) con dependencias simuladas. |
+| `Código.gs` | Configuración (`CONFIG.VENTANA`, `CONFIG.COL_PENDIENTES`, `ENCABEZADOS_PENDIENTES`, `ETIQUETAS_PENDIENTES`, hojas `Festivos` y `Bitácora_Ventana`), detección de columnas genérica (`detectarColumnasEn`) aplicada también a Pendientes, `onFormSubmit`, `onEditTrigger`, alerta diaria, correo, migración, menú, `probarTodo`. |
+| `Servicios.gs` | Catálogo del Excel como oráculo independiente (`CAT_UBICACIONES`, `CAT_SERVICIOS`, `CAT_CATEGORIAS`, `CAT_CANTIDAD`, `CAT_TIEMPOS`) y `probarServicios` (5.530 casos). Ver §13. |
+| `tests/` | Arnés Node (`harness.js`, `run.js`) para correr las suites fuera de Sheets y prueba de mutación (`mutacion.js`). No se sube con clasp. |
+
+### 12.2 Semántica del plazo
+
+Un día hábil aporta 24 h; sábados, domingos y las fechas de `Festivos` aportan 0 h. Las etiquetas y sus horas no cambian (`24 HORAS` = 24 h hábiles, `5 DIAS` = 120 h hábiles). El reloj arranca en la marca temporal si la ventana estaba abierta; si no, en la siguiente apertura, y el correo al solicitante lo indica. Ejemplo: solicitud del viernes 16-oct-2026 a las 16:00 con `24 HORAS` → inicio lunes 19 a las 8:00 → fecha límite martes 20 a las 8:00.
+
+### 12.3 Modelo de datos de `Solicitudes Pendientes`
+
+Columnas localizadas por encabezado; el script crea las que falten. Nuevas: `INICIO RELOJ` (13) y `FECHA LÍMITE` (14, clave de orden de la bandeja). La columna 12 pasa a `HORAS HÁBILES RESTANTES`, con una fórmula `LET` + `NETWORKDAYS.INTL` que reproduce `horasHabilesEntre(NOW(), límite)` y devuelve valores negativos cuando la solicitud está vencida. *Recalcular plazos de pendientes* migra la bandeja existente conservando `INICIO RELOJ` cuando ya existe; las filas con fecha de solicitud inválida (p. ej. `31/12/1969`) se marcan y no se recalculan.
+
+### 12.4 Alerta diaria
+
+`verificarSolicitudesVencidas` calcula con horas hábiles y separa vencidas (con horas de retraso) de próximas a vencer (≤ 20 % del plazo); el porcentaje está acotado a 0–100, lo que cierra **H-07**. Añade avisos cuando hay filas sin fecha límite (pendientes de migrar) o años sin festivos generados.
+
+### 12.5 Ventana del formulario
+
+Regla generalizada: cierra a las 15:30 de todo día hábil seguido de uno no hábil y abre a las 8:00 de todo día hábil precedido de uno no hábil; permanece abierto de noche entre días hábiles consecutivos; cerrado todo día no hábil. Disparadores: `programarVentana` (diario 6:00), `reconciliarVentana` (cada hora) y los puntuales `abrirFormulario` / `cerrarFormulario`, que se eliminan a sí mismos. Formulario objetivo en `CONFIG.VENTANA.FORMULARIO` (hoy el de pruebas).
+
+**Paso a producción:** cambiar `CONFIG.VENTANA.FORMULARIO` al ID `1gs6GlaxJqFyJSH1dCgc9gZPax-c4iRuEsZoxHKRk0-M`, verificar que la cuenta que ejecutará *Configurar triggers* sea propietaria o editora de ese formulario, ejecutar *Configurar triggers* y comprobar *Formulario → Estado de la ventana*. El script debe vivir en la hoja de producción (es contenedor): hay que copiar los cinco `.gs` allí.
+
+### 12.6 Pruebas
+
+`Soporte → Pruebas → Probar todo` ejecuta las cinco suites (5.705 casos) sin tocar formulario ni disparadores reales. `Fórmula de horas hábiles ↔ script` compara la fórmula de la hoja con el cálculo del script en una hoja temporal. Las mismas suites corren en Node con un arnés que simula los servicios de Google (`tests/`, `npm test`).
+

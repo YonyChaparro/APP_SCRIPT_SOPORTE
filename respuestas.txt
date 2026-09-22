@@ -1,0 +1,27 @@
+Decisión 1 — Alcance de "festivo". ¿Solo festivos nacionales, o también días no hábiles de la Universidad (vacaciones colectivas de diciembre-enero, jornadas institucionales)? Si es lo segundo, alguien debe mantener la pestaña a mano cada año; el generador solo cubre los nacionales.
+RTA: Solo festivos nacionales pero que también estos festivos se puedan modificar desde alguna pestaña
+
+Decisión 2 — Qué es una "hora hábil". Dos lecturas:
+
+Día hábil = 24 h	Solo horario laboral (p. ej. 8:00–17:00)
+"24 HORAS" significa	1 día hábil	≈ 2,7 días hábiles
+"5 DIAS" significa	5 días hábiles	≈ 13 días hábiles
+Fidelidad al Excel	Alta	Cambia el sentido de todas las etiquetas
+Tu texto dice "fines de semana y festivos", que corresponde a la primera. La recomiendo; confírmala.
+RTA: las 24 horas hábiles serían las reales hábiles para el usuario. El contexto de días hábiles es para que el solicitante tenga una referencia real de lo que debe esperar para que su solicitud sea solucionada.
+
+
+Decisión 3 — Festivos entre semana. Tu frase "festivos diferentes a los lunes" admite dos lecturas:
+RTA: (b) El formulario cierra todo festivo, sea el día que sea.
+
+Y un caso borde: si el viernes es festivo (Viernes Santo, por ejemplo), ¿la ventana cierra el jueves a las 15:30?
+RTA: Sí 
+
+Decisión 4 — Qué formulario(s). El script está vinculado a la hoja de pruebas. ¿Programo el de pruebas (1druQ9zq…), el de producción (1gs6Glax…) o ambos? Para producción hay que confirmar que el script que corre allí es este mismo código.
+RTA: Por el momento solo trabajemos en pruebas
+
+
+
+Decisión 5 — Texto del mensaje de cierre (puedo proponer uno).
+RTA: Sí
+

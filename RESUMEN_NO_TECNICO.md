@@ -48,15 +48,21 @@ El sistema **está bien concebido**. La idea de calcular los plazos automáticam
 
 Pero la revisión encontró problemas que hoy le están restando buena parte de su utilidad. Estos son los cuatro que importan.
 
-### 1. Los plazos se están calculando mal
+### 1. Los plazos se estaban calculando mal *(corregido el 15 de septiembre de 2026)*
 
-**Qué pasa:** el sistema compara lo que el usuario escogió en el formulario contra una lista interna de opciones. Si las dos no coinciden **letra por letra**, el sistema no reconoce la opción y la califica con cero.
+**Qué pasaba:** el sistema comparaba lo que el usuario escogió en el formulario contra una lista interna de opciones. Si las dos no coincidían **letra por letra**, no reconocía la opción y la calificaba con cero.
 
-Y hoy muchas **no** coinciden. Son diferencias mínimas —una tilde de más, un guion donde debería haber una coma, "UIFCE" en un lado y "Unidad de Informática" en el otro— pero para el sistema son valores completamente distintos.
+Y muchas **no** coincidían. Revisando el formulario completo, **11 de las 38 oficinas y 16 de los 31 tipos de servicio** no eran reconocidos. Había tres razones:
 
-**Qué significa en la práctica:** una buena parte de las solicitudes termina con el plazo más exigente, 24 horas, sin importar si realmente es urgente. La priorización, que es la razón de ser del sistema, deja de funcionar. Y lo hace **en silencio**: no aparece ningún error, ninguna advertencia. Todo parece normal.
+- **Un error de estructura.** Para los problemas de "Revisión y Reparación" el formulario pregunta primero el grupo (Hardware, Software, Conectividad, Usuario) y luego el problema concreto. El sistema leía el grupo y nunca llegaba a leer el problema. Era el caso más frecuente.
+- **Diferencias de escritura.** Una tilde de más, un guion donde el sistema esperaba una coma, "Otros" en plural frente a "Otro" en singular.
+- **Nombres distintos.** La lista interna se copió del documento de especificación (`TIEMPOS DE RESPUESTA.xlsx`), pero el formulario se redactó con otros nombres: "UIFCE" en uno y "Unidad de Informática" en el otro; "Sala de Informática 1" frente a "Sala 1". Los puntajes del documento eran correctos; los nombres no coincidían. Y dos opciones del formulario ("Creación de usuarios" y "Falla de inicio de sesión") no aparecen en el documento, así que nadie les había asignado puntaje.
 
-**Ejemplo real:** la solicitud `FCE-SOP-087` debería tener 72 horas de plazo. El sistema le asignó 48 porque no reconoció el tipo de problema seleccionado.
+**Qué significaba en la práctica:** cada opción no reconocida restaba puntos, y como menos puntos significa más urgencia, **el plazo se acortaba uno o dos niveles sin que nadie lo pidiera**. En las 31 solicitudes registradas, casi la mitad tenía algún componente mal calificado y 9 terminaron con un plazo distinto al que les correspondía. Y todo ocurría **en silencio**: sin error, sin advertencia.
+
+**Ejemplos reales:** `FCE-SOP-080` (mantenimiento preventivo de 35 impresoras) debía quedar como "durante el semestre" y quedó en 10 días. `FCE-SOP-062` (una baja de equipos en la UIFCE) debía tener el plazo más largo y quedó en 15 días.
+
+**Qué se hizo:** se reescribió la lista interna con los puntajes del documento de especificación y los nombres tal cual están en el formulario de producción, se corrigió el error de estructura y ahora el sistema tolera diferencias de tildes, mayúsculas y puntuación. Además, el sistema ahora acepta los nombres de las tres fuentes (el documento de especificación y los dos formularios) como equivalentes, y localiza las columnas de la hoja por su título, así que sobrevive a que se agreguen o muevan preguntas en el formulario. Si en el futuro aparece una opción que no reconoce, **ya no la califica con cero**: le asigna un valor intermedio, pinta la fila de amarillo en la lista de pendientes y avisa por correo. Además, la hoja tiene un menú nuevo, **Soporte**, con tres herramientas: probar el cálculo con 38 casos reales, auditar el formulario contra la lista interna, y recalcular los plazos de las solicitudes pendientes.
 
 ### 2. Hay solicitudes atascadas que nunca se podrán cerrar
 
@@ -88,13 +94,23 @@ Lo mismo con los plazos: hay filas que dicen "5 DÍAS" con tilde, mientras el si
 
 **Si algo falla, el sistema envía un correo por cada error.** Como hay revisiones automáticas todos los días, un problema que no se corrija genera un correo diario indefinidamente. Y si se agota el límite diario de correos de Google, el aviso de error tampoco sale: el sistema queda sin avisar justo cuando más lo necesita.
 
-**Los correos de alerta traen porcentajes absurdos.** Por el problema de las fechas, la alerta diaria está reportando avances de más del 15.000 %.
+**Los correos de alerta traían porcentajes absurdos.** *(Corregido el 17 de septiembre: la alerta ahora separa vencidas de próximas a vencer y muestra porcentajes entre 0 y 100.)*
 
 **El número de radicado depende de la posición de la fila.** Si alguien borra o inserta una fila en la hoja, los radicados se repiten o se saltan. Conviene no manipular filas manualmente.
 
 **Este entorno de pruebas envía correos reales.** Contiene correos institucionales y teléfonos verdaderos, y los avisos administrativos siguen apuntando al buzón de producción `soporte@fce.unal.edu.co`. Cualquier prueba llega a personas reales.
 
 ---
+
+## Novedades del 17 de septiembre de 2026
+
+Se implementaron dos mejoras pedidas por la Unidad:
+
+**Los plazos ya cuentan solo días hábiles.** Sábados, domingos y festivos nacionales no descuentan tiempo. Una solicitud del viernes a las 10:00 con plazo de 24 horas vence el lunes a las 10:00, no el sábado. Si una solicitud llega fuera del horario de atención, el plazo empieza a correr en la siguiente apertura y el correo de confirmación lo explica. Además, el correo ahora dice la **fecha y hora límite estimada** («martes 20 de octubre de 2026, 8:00 a. m.»), para que el solicitante sepa qué esperar. Los festivos se generan solos cada año desde el menú y quedan en una pestaña `Festivos` que cualquier persona puede editar.
+
+**El formulario se cierra fuera del horario de atención.** Recibe solicitudes desde las 8:00 a. m. del primer día hábil de la semana hasta las 3:30 p. m. del último, y se cierra en todo festivo. Cuando está cerrado muestra un mensaje con la fecha exacta en que reabre. Hay un menú para abrirlo o cerrarlo a mano en una contingencia, y una bitácora que registra cada apertura y cierre. Por ahora aplica solo al formulario de pruebas.
+
+Lo que falta para dejarlo funcionando en la hoja de pruebas está en `specs/README.md` (cinco pasos desde el menú Soporte).
 
 ## Qué se recomienda hacer
 
@@ -106,7 +122,7 @@ Lo mismo con los plazos: hay filas que dicen "5 DÍAS" con tilde, mientras el si
 
 **Después, corregir el fondo** *(requiere desarrollo)*
 
-- Hacer que el sistema reconozca las opciones aunque difieran en tildes o puntuación. Esto soluciona de una vez los problemas 1 y 3, que son los más graves.
+- ~~Hacer que el sistema reconozca las opciones aunque difieran en tildes o puntuación.~~ **Hecho** (problema 1, y la parte del problema 3 que afectaba los plazos). Quedan tres decisiones para el responsable del proceso: el formulario de producción no ofrece dos categorías que el documento de especificación sí contempla ("Instalación y Alistamiento" y "Cambio de Ubicación"); las dos opciones de "Usuario" del formulario necesitan un puntaje oficial en el documento (hoy tienen uno provisional); y una oficina se llama distinto en cada formulario ("Secretaría Académica" en pruebas, "Secretaría de Facultad" en producción).
 - Cambiar la forma de numerar los radicados para que no dependa de la posición de la fila.
 - Activar el archivado de las solicitudes resueltas.
 - Reemplazar la ventana de confirmación por una casilla de verificación, que funciona igual para todos los técnicos.
@@ -120,7 +136,7 @@ Lo mismo con los plazos: hay filas que dicen "5 DÍAS" con tilde, mientras el si
 
 ## En una frase
 
-El sistema está bien diseñado y resuelve un problema real, pero **su función central —decidir qué es urgente— hoy no está operando correctamente** por diferencias de escritura entre el formulario y el programa. Es un problema corregible y, una vez resuelto, el resto son ajustes menores.
+El sistema está bien diseñado y resuelve un problema real. Su función central —decidir qué es urgente— no estaba operando correctamente por diferencias entre el formulario y el programa; **eso ya está corregido y protegido con pruebas**. El resto son ajustes menores.
 
 ---
 
