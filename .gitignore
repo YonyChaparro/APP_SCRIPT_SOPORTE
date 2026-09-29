@@ -5,3 +5,9 @@ node_modules/
 
 # Capturas de los formularios: referencia útil, no necesarias para compilar ni probar.
 *.pdf
+
+# Credenciales OAuth: nunca al repositorio.
+client_secret_*.json
+
+# Respaldos de la hoja de producción: contienen datos personales.
+produccion/respaldos/
