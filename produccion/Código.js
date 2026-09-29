@@ -11,7 +11,7 @@ const CONFIG = {
   COL: { 
     CODIGO: 1, TIMESTAMP: 2, EMAIL: 3, NOMBRE: 4, TELEFONO: 5, 
     EDIFICIO: 6, UBICACION: [7, 8, 9], CATEGORIA: 10, 
-    SUBCAT1: [11, 12, 13, 19, 20, 21, 22], SUBCAT2: [15, 16, 17, 18],   // la 14 es el grupo (Hardware, Software…), no un servicio 
+    SERVICIO: [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22],   // respaldo; ver ENCABEZADOS
     CANTIDAD: 23, COMENTARIOS: 24, ESTADO: 25, FECHA_NOTIF: 26, 
     RESPONSABLE: 27, COMENTARIO_RESOLUCION: 28 
   },
@@ -19,6 +19,25 @@ const CONFIG = {
   URL_ENCUESTA: "https://forms.gle/msZfTTzQTJ76AX8c7",
   EMAIL_ADMIN: "soportec_fcebog@unal.edu.co",
   RESPONSABLES: ["Oscar", "Belisario", "Diego"]
+};
+
+// Cómo se reconoce cada pregunta del formulario en Respuestas_Oficiales: por su encabezado,
+// no por su posición. Así, añadir, quitar o mover una pregunta no desplaza los puntajes.
+// CONFIG.COL solo se usa si un encabezado no aparece (y se avisa al administrador).
+// Las columnas de servicio son todas las que quedan entre CATEGORIA y CANTIDAD, porque el
+// formulario repite el título "Seleccione el servicio:" en varias secciones. Una pregunta
+// añadida después de vincular el formulario aparece al final de la hoja: por eso, si ahí no
+// hay un servicio de la categoría elegida, se busca también en las columnas no identificadas.
+const ENCABEZADOS = {
+  TIMESTAMP: /marca temporal|timestamp/i,
+  EMAIL: /correo|e-?mail/i,
+  NOMBRE: /nombres? y apellidos/i,
+  TELEFONO: /^tel[eé]fono/i,
+  EDIFICIO: /^seleccione el edificio/i,
+  UBICACION: /ubicaci[oó]n exacta/i,        // una columna por edificio
+  CATEGORIA: /^seleccione la categor/i,
+  CANTIDAD: /cantidad de equipos/i,
+  COMENTARIOS: /comentarios adicionales/i
 };
 
 // Puntajes de TIEMPOS DE RESPUESTA.xlsx, con las opciones escritas como en el formulario.
@@ -58,6 +77,10 @@ const PUNTAJES = {
       "Instalación de Toner": 10, "Falla de Red": 10, "Otros": 20
     },
     "PC y Portátiles - Mantenimiento Preventivo": { "Limpieza Interna y Externa": 25 },
+    // Sin subpregunta en el formulario: el único servicio se asume. Hoy solo existen en el
+    // formulario de pruebas; se incluyen para que no queden sin puntaje si se publican.
+    "PC y Portátiles - Instalación y Alistamiento": { "Instalación y Alistamiento": 25 },
+    "PC y Portátiles - Cambio de Ubicación": { "Movimiento de equipos entre oficinas": 20 },
     "PC y Portátiles - Revisión y Reparación": {
       "Equipo no enciende": 5, "Daño en periféricos (Teclado, Mouse, etc)": 5,
       "Equipo no inicia - pantalla negra": 5, "Equipo Lento": 10, "Software con fallas": 5,
@@ -76,15 +99,35 @@ const PUNTAJES = {
   }
 };
 
+// Otros nombres de la misma opción (versiones anteriores del formulario, formulario de
+// pruebas, lista desplegable de Pendientes). Cada alias apunta a la clave de PUNTAJES.
+const ALIAS = {
+  UBICACION: {
+    "310": {
+      "Unidad de Informática": "UIFCE",
+      "Sala 1": "Sala de Informática 1", "Sala 2": "Sala de Informática 2", "Sala 3": "Sala de Informática 3",
+      "Oficina Area C. de Contabililidad y F.": "Oficina Área Curricular de Contabilidad y Finanzas",
+      "Oficina Area C. de Contabilidad y F.": "Oficina Área Curricular de Contabilidad y Finanzas",
+      "Oficina Area C. de Economía y Des.": "Oficina Área Curricular de Economía y Desarrollo",
+      "Oficina Area C. de Gestión y Org.": "Oficina Área Curricular de Gestión y Organizaciones"
+    },
+    "311": { "Oficinas Docentes": "Oficinas Docentes 311", "Secretaría Académica": "Secretaría de Facultad" },
+    "238": {
+      "Oficinas Docentes": "Oficinas Docentes 238", "Sala 6": "Sala de Informática 6",
+      "Vicedecanatura de Investigación y Ext.": "Vicedecanatura de Investigación y Extensión"
+    }
+  },
+  SERVICIO: {
+    "Impresoras": { "Mantenimiento Preventivo": "Mantenimiento Preventivo Impresora", "Otro": "Otros" }
+  }
+};
+
+// Respuestas del formulario que ramifican hacia otra pregunta: no son servicios.
+const GRUPOS_NO_SERVICIO = ["Hardware", "Software", "Conectividad", "Internet y Conectividad", "Usuario"];
+
 // Puntaje de una opción que no está en PUNTAJES. Antes era 0, lo que acortaba el plazo en
 // silencio; ahora es un valor intermedio y se avisa por correo al administrador.
 const PUNTAJE_SIN_COINCIDENCIA = 10;
-
-// Nombres de la lista desplegable de Pendientes que, dentro de una categoría, equivalen a
-// otra opción de esa misma categoría.
-const ALIAS_SERVICIO = {
-  "Impresoras": { "Mantenimiento Preventivo": "Mantenimiento Preventivo Impresora", "Otro": "Otros" }
-};
 
 // Definición de tiempos y horas para fórmulas
 const TIEMPOS = [
@@ -100,7 +143,7 @@ const HORAS_TIEMPO = {
 // "Sala de Informática 1" y "SALA DE INFORMATICA 1." -> "SALA DE INFORMATICA 1"
 function normalizarTexto(texto) {
   return String(texto == null ? "" : texto)
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
     .toUpperCase()
     .replace(/[^A-Z0-9 ]+/g, " ")
     .replace(/\s+/g, " ")
@@ -112,17 +155,30 @@ function nombreCategoria(categoria) {
   return String(categoria == null ? "" : categoria).split("(")[0].trim();
 }
 
-// PUNTAJES con claves normalizadas, construido una sola vez por ejecución.
+// "310", "ED_310" o "Edificio 310" -> "310"
+function normalizarEdificio(edificio) {
+  return String(edificio == null ? "" : edificio).replace(/\D/g, "");
+}
+
+// PUNTAJES y ALIAS con claves normalizadas, construido una sola vez por ejecución.
+// Cada entrada guarda los puntos y el nombre canónico.
 const INDICE = (function () {
   const ubicacion = {}, servicios = {};
   for (const ed in PUNTAJES.UBICACION) {
     ubicacion[ed] = {};
-    for (const nombre in PUNTAJES.UBICACION[ed]) ubicacion[ed][normalizarTexto(nombre)] = PUNTAJES.UBICACION[ed][nombre];
+    for (const nombre in PUNTAJES.UBICACION[ed]) ubicacion[ed][normalizarTexto(nombre)] = { puntos: PUNTAJES.UBICACION[ed][nombre], nombre };
+    for (const alias in (ALIAS.UBICACION[ed] || {})) {
+      const canonico = ALIAS.UBICACION[ed][alias];
+      ubicacion[ed][normalizarTexto(alias)] = { puntos: PUNTAJES.UBICACION[ed][canonico], nombre: canonico };
+    }
   }
   for (const cat in PUNTAJES.SERVICIOS) {
     const opciones = {};
-    for (const s in PUNTAJES.SERVICIOS[cat]) opciones[normalizarTexto(s)] = PUNTAJES.SERVICIOS[cat][s];
-    for (const alias in (ALIAS_SERVICIO[cat] || {})) opciones[normalizarTexto(alias)] = PUNTAJES.SERVICIOS[cat][ALIAS_SERVICIO[cat][alias]];
+    for (const s in PUNTAJES.SERVICIOS[cat]) opciones[normalizarTexto(s)] = { puntos: PUNTAJES.SERVICIOS[cat][s], nombre: s };
+    for (const alias in (ALIAS.SERVICIO[cat] || {})) {
+      const canonico = ALIAS.SERVICIO[cat][alias];
+      opciones[normalizarTexto(alias)] = { puntos: PUNTAJES.SERVICIOS[cat][canonico], nombre: canonico };
+    }
     servicios[normalizarTexto(cat)] = opciones;
   }
   return { UBICACION: ubicacion, SERVICIOS: servicios };
@@ -159,33 +215,33 @@ function onFormSubmit(e) {
       return; 
     }
 
-    const fila = hojaRespuestas.getRange(ultimaFila, 1, 1, CONFIG.COL.COMENTARIOS).getValues()[0];
-    const valores = fila; // Array completo de valores
+    const COL = detectarColumnas(hojaRespuestas);
+    const fila = hojaRespuestas.getRange(ultimaFila, 1, 1, hojaRespuestas.getLastColumn()).getValues()[0];
 
     // --- CÁLCULOS ---
     
     // 1. Datos básicos
-    const email = fila[CONFIG.COL.EMAIL - 1];
-    const nombre = fila[CONFIG.COL.NOMBRE - 1];
-    const comentarios = fila[CONFIG.COL.COMENTARIOS - 1] || "Sin comentarios";
-    const edificioRaw = valores[CONFIG.COL.EDIFICIO - 1];
-    const categoria = valores[CONFIG.COL.CATEGORIA - 1];
+    const email = fila[COL.EMAIL - 1];
+    const nombre = fila[COL.NOMBRE - 1];
+    const comentarios = fila[COL.COMENTARIOS - 1] || "Sin comentarios";
+    const edificioRaw = fila[COL.EDIFICIO - 1];
+    const categoria = fila[COL.CATEGORIA - 1];
+    const edificio = normalizarEdificio(edificioRaw);
     
-    // 2. Ubicación (Manejo de ED_ y Mayúsculas)
-    let edificio = (edificioRaw || "").toString().trim().toUpperCase();
-    if (edificio.startsWith("ED_")) edificio = edificio.substring(3); // Quita prefijo
+    // 2. Ubicación: la única columna de ubicación respondida (una por edificio)
+    const ubicacion = obtenerValorDeColumnas(fila, COL.UBICACION);
     
-    const ubicacion = obtenerValorDeColumnas(valores, CONFIG.COL.UBICACION);
-    
-    // 3. Servicio
-    let subcategoria = obtenerValorDeColumnas(valores, CONFIG.COL.SUBCAT1);
-    if (!subcategoria) subcategoria = obtenerValorDeColumnas(valores, CONFIG.COL.SUBCAT2);
+    // 3. Servicio: la respuesta de la sección de su categoría, sin los selectores de grupo
+    const servicio = extraerServicio(fila, COL.SERVICIO, categoria, COL.OTRAS);
 
     // 4. Puntajes
     const ptsUbicacion = getPuntajeUbicacion(edificio, ubicacion);
-    const ptsServicio = getPuntajeServicio(categoria, subcategoria);
-    const cantidad = valores[CONFIG.COL.CANTIDAD - 1];
+    const ptsServicio = getPuntajeServicio(categoria, servicio);
+    const cantidad = fila[COL.CANTIDAD - 1];
     const ptsCantidad = getPuntajeCantidad(cantidad);
+    // Nombre del servicio para el correo y la bandeja. En categorías sin subpregunta la
+    // respuesta viene vacía y se muestra el único servicio de la categoría.
+    const subcategoria = (servicio || nombreServicio(categoria, servicio)).toUpperCase();
     const correo_soporte = "soportec_fcebog@unal.edu.co";
 
     const puntajeTotal = ptsUbicacion + ptsServicio + ptsCantidad;
@@ -216,7 +272,7 @@ function onFormSubmit(e) {
       const hojaPendientes = getHoja(CONFIG.HOJAS.PENDIENTES);
       if (!hojaPendientes) throw new Error(`Hoja de Pendientes no encontrada.`);
       
-      const fechaSolicitud = new Date(fila[CONFIG.COL.TIMESTAMP - 1]);
+      const fechaSolicitud = new Date(fila[COL.TIMESTAMP - 1]);
       const cantidadStr = String(cantidad);
       const newRow = hojaPendientes.getLastRow() + 1;
       
@@ -369,29 +425,102 @@ function obtenerValorDeColumnas(fila, indicesColumnas) {
   return "";
 }
 
+// Localiza las preguntas del formulario por su encabezado (ENCABEZADOS). Si alguno no se
+// reconoce se usa la posición de CONFIG.COL y se avisa: el formulario cambió y hay que revisar
+// ENCABEZADOS. Las columnas propias del script (radicado, estado…) siguen en CONFIG.COL.
+const _columnas = {};
+function detectarColumnas(hoja) {
+  const clave = hoja.getName();
+  if (_columnas[clave]) return _columnas[clave];
+  const col = JSON.parse(JSON.stringify(CONFIG.COL));
+  const encabezados = hoja.getRange(1, 1, 1, Math.max(1, hoja.getLastColumn())).getValues()[0]
+    .map(h => String(h == null ? "" : h).trim());
+  const faltantes = [];
+  for (const campo in ENCABEZADOS) {
+    const hallazgos = encabezados.map((h, i) => ENCABEZADOS[campo].test(h) ? i + 1 : 0).filter(Boolean);
+    if (!hallazgos.length) { faltantes.push(campo); continue; }
+    col[campo] = Array.isArray(CONFIG.COL[campo]) ? hallazgos : hallazgos[0];
+  }
+  if (faltantes.indexOf("CATEGORIA") === -1 && faltantes.indexOf("CANTIDAD") === -1 && col.CANTIDAD > col.CATEGORIA + 1) {
+    col.SERVICIO = [];
+    for (let c = col.CATEGORIA + 1; c < col.CANTIDAD; c++) col.SERVICIO.push(c);
+  } else if (faltantes.indexOf("CATEGORIA") !== -1 || faltantes.indexOf("CANTIDAD") !== -1) {
+    faltantes.push("SERVICIO");
+  } else {
+    col.SERVICIO = [];   // ninguna categoría tiene subpregunta
+  }
+  // Columnas que no son de ninguna pregunta conocida ni del script: posibles subpreguntas nuevas.
+  const conocidas = [].concat(...Object.keys(ENCABEZADOS).map(c => col[c]), col.SERVICIO || [],
+    CONFIG.COL.CODIGO, CONFIG.COL.ESTADO, CONFIG.COL.FECHA_NOTIF, CONFIG.COL.RESPONSABLE, CONFIG.COL.COMENTARIO_RESOLUCION);
+  col.OTRAS = encabezados.map((h, i) => i + 1).filter(c => conocidas.indexOf(c) === -1);
+  if (faltantes.length) {
+    logError("detectarColumnas", { message: `Sin encabezado reconocible en ${hoja.getName()} para ${faltantes.join(", ")}; ` +
+      `se usaron las posiciones de CONFIG.COL. Revise ENCABEZADOS en Código.gs.` });
+  }
+  _columnas[clave] = col;
+  return col;
+}
+
+// true si el valor es un selector de grupo del formulario (Hardware, Software…), no un servicio.
+function esGrupo(valor) {
+  const clave = normalizarTexto(valor);
+  return GRUPOS_NO_SERVICIO.some(g => normalizarTexto(g) === clave);
+}
+
+// Servicio de una fila: el valor de las columnas de servicio que no es un grupo. Por la
+// ramificación del formulario solo debería haber uno; si hubiera varios, gana el que
+// pertenece a la categoría elegida. Si ninguno pertenece, se busca en `otrasColumnas`
+// (preguntas añadidas al final de la hoja) un valor que sí pertenezca.
+function extraerServicio(fila, columnasServicio, categoria, otrasColumnas) {
+  const valores = cols => (cols || [])
+    .map(c => String(fila[c - 1] == null ? "" : fila[c - 1]).trim())
+    .filter(v => v !== "" && !esGrupo(v));
+  const deLaCategoria = v => INDICE.SERVICIOS[normalizarTexto(nombreCategoria(categoria))] &&
+    INDICE.SERVICIOS[normalizarTexto(nombreCategoria(categoria))][normalizarTexto(v)];
+  const candidatos = valores(columnasServicio);
+  return candidatos.find(deLaCategoria) || valores(otrasColumnas).find(deLaCategoria) || candidatos[0] || "";
+}
+
+// Devuelve { puntos, nombre, encontrado }.
+// - Dentro de la categoría elegida (con sus alias).
+// - Respuesta vacía en una categoría de un solo servicio (sin subpregunta): ese servicio.
+// - Si no está en su categoría (p. ej. cambio manual en Pendientes o categoría ausente), se
+//   acepta cuando el nombre existe en otras categorías con un único puntaje.
+function buscarServicio(categoria, servicio) {
+  const clave = normalizarTexto(servicio);
+  const cat = INDICE.SERVICIOS[normalizarTexto(nombreCategoria(categoria))];
+  if (cat) {
+    const opciones = Object.keys(cat);
+    if (!clave && opciones.length === 1) return Object.assign({ encontrado: true }, cat[opciones[0]]);
+    if (cat[clave]) return Object.assign({ encontrado: true }, cat[clave]);
+  }
+  const hallazgos = Object.keys(INDICE.SERVICIOS).map(k => INDICE.SERVICIOS[k][clave]).filter(Boolean);
+  if (clave && hallazgos.length && hallazgos.every(h => h.puntos === hallazgos[0].puntos)) {
+    return Object.assign({ encontrado: true }, hallazgos[0]);
+  }
+  return { puntos: null, nombre: String(servicio || ""), encontrado: false };
+}
+
+function nombreServicio(categoria, servicio) {
+  return buscarServicio(categoria, servicio).nombre;
+}
+
 function getPuntajeUbicacion(edificio, ubicacion) {
-  const ed = String(edificio == null ? "" : edificio).replace(/\D/g, "");   // "ED_310" -> "310"
-  const pts = (INDICE.UBICACION[ed] || {})[normalizarTexto(ubicacion)];
-  if (pts !== undefined) return pts;
+  const ed = normalizarEdificio(edificio);
+  const clave = normalizarTexto(ubicacion);
+  const hit = (INDICE.UBICACION[ed] || {})[clave];
+  if (hit) return hit.puntos;
+  // Edificio vacío o equivocado: se acepta si la ubicación existe en un único edificio.
+  const otros = Object.keys(INDICE.UBICACION).filter(e => INDICE.UBICACION[e][clave]);
+  if (clave && otros.length === 1) return INDICE.UBICACION[otros[0]][clave].puntos;
   avisarSinCoincidencia(`ubicación "${ubicacion}" no reconocida en el edificio "${edificio}"`);
   return PUNTAJE_SIN_COINCIDENCIA;
 }
 
-// Busca el servicio dentro de su categoría. Sin categoría (bandeja de Pendientes), o si no está
-// en ella, lo acepta si existe en otras categorías con un único puntaje. Un servicio vacío vale
-// si la categoría tiene una sola opción.
-function getPuntajeServicio(categoria, subcategoria) {
-  const clave = normalizarTexto(subcategoria);
-  const cat = INDICE.SERVICIOS[normalizarTexto(nombreCategoria(categoria))];
-  if (cat) {
-    if (!clave && Object.keys(cat).length === 1) return cat[Object.keys(cat)[0]];
-    if (cat[clave] !== undefined) return cat[clave];
-  }
-  const valores = Object.keys(INDICE.SERVICIOS)
-    .filter(k => INDICE.SERVICIOS[k][clave] !== undefined)
-    .map(k => INDICE.SERVICIOS[k][clave]);
-  if (clave && valores.length && valores.every(v => v === valores[0])) return valores[0];
-  avisarSinCoincidencia(`servicio "${subcategoria}" no reconocido en la categoría "${nombreCategoria(categoria)}"`);
+function getPuntajeServicio(categoria, servicio) {
+  const r = buscarServicio(categoria, servicio);
+  if (r.encontrado) return r.puntos;
+  avisarSinCoincidencia(`servicio "${servicio}" no reconocido en la categoría "${nombreCategoria(categoria)}"`);
   return PUNTAJE_SIN_COINCIDENCIA;
 }
 
@@ -404,18 +533,20 @@ function avisarSinCoincidencia(detalle) {
 function categoriaDeRadicado(codigo) {
   const hoja = getHoja(CONFIG.HOJAS.RESPUESTAS);
   if (!hoja) return "";
+  const COL = detectarColumnas(hoja);
   const fila = hoja.getDataRange().getValues().find(row => row[CONFIG.COL.CODIGO - 1] === codigo);
-  return fila ? fila[CONFIG.COL.CATEGORIA - 1] : "";
+  return fila ? fila[COL.CATEGORIA - 1] : "";
 }
 
+// Puntaje por cantidad (pestaña CANTIDAD DE EQUIPOS del Excel). Toma el primer número del
+// texto: "aprox. 20 equipos" -> 20 (parseInt daba NaN y lo contaba como 1 equipo).
 function getPuntajeCantidad(cantidadIngresada) {
-  let num = parseInt(cantidadIngresada, 10);
-  if (isNaN(num) || num <= 0) return 1; 
-  if (num >= 1 && num <= 3) return 1;
-  if (num >= 4 && num <= 14) return 10;
-  if (num >= 15 && num <= 30) return 20;
-  if (num > 30) return 35;
-  return 1;
+  const m = String(cantidadIngresada == null ? "" : cantidadIngresada).match(/-?\d+/);
+  const num = m ? parseInt(m[0], 10) : 0;
+  if (num <= 3) return 1;
+  if (num <= 14) return 10;
+  if (num <= 30) return 20;
+  return 35;
 }
 
 function calcularTiempo(puntajeTotal) {

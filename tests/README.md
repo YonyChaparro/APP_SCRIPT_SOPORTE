@@ -11,6 +11,7 @@ npm run test:servicios   # solo el catálogo de servicios
 npm run test:tiempos     # solo los plazos de respuesta
 npm run test:excel       # solo la comparación con el .xlsx del disco
 npm run test:verificacion # solo el informe de verificación de la hoja
+npm run test:produccion  # el script de producción (produccion/Código.js) contra el Excel
 npm run mutacion         # comprueba que las suites detectan averías
 npm run matriz           # regenera TIEMPOS_POR_SERVICIO.md
 VERBOSE=1 npm test       # además vuelca el Logger
@@ -24,6 +25,8 @@ VERBOSE=1 npm test       # además vuelca el Logger
 | `excel.js` | Compara el `.xlsx` real del disco con el catálogo transcrito en el código |
 | `matriz.js` | Genera `TIEMPOS_POR_SERVICIO.md` a partir del motor y del `.xlsx` |
 | `verificacion.js` | Prueba de humo del informe de `Verificacion.gs`: que no lo tumbe un libro vacío |
+| `produccion.js` | Ejecuta `onFormSubmit` y `onEditTrigger` del script de producción con todos los recorridos del formulario (y variantes: pregunta recreada al final, columnas movidas, opciones del formulario de pruebas) y compara el plazo con el motor del repo. `node tests/produccion.js produccion/Código.original.js` sirve de control: debe fallar |
+| `formulario_produccion.js` | Estructura del formulario de producción (preguntas, opciones y ramificación), sin respuestas |
 | `mutacion.js` | Introduce 17 averías de una en una, verifica que la suite correspondiente las detecta y restaura los archivos |
 
 ## Por qué existe el arnés

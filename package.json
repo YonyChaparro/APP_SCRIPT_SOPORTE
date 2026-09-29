@@ -12,6 +12,7 @@
     "test:ventana": "node tests/run.js ventana",
     "test:excel": "node tests/excel.js",
     "test:verificacion": "node tests/verificacion.js",
+    "test:produccion": "node tests/produccion.js",
     "mutacion": "node tests/mutacion.js",
     "matriz": "node tests/matriz.js"
   },
